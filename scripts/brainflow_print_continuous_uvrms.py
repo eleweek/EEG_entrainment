@@ -74,7 +74,7 @@ def main():
 
                 last_second_mne_data = mne_raw[channel_idx, -sampling_rate:]
 
-                print(f"Channel {channel}: fake = {fake_value:.2f} uV  real = {real_value:.2f} uV    MNE fake = {1e6 * real_uvrms(last_second_mne_data):.2f} uV real = {1e6 * fake_uvrms(last_second_mne_data):.2f} uV")
+                print(f"Channel {channel}: fake = {fake_value:.2f} uV  real = {real_value:.2f} uV    MNE fake = {1e6 * fake_uvrms(last_second_mne_data):.2f} uV real = {1e6 * real_uvrms(last_second_mne_data):.2f} uV")
 
             time.sleep(1)
 
