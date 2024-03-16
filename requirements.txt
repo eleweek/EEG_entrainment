@@ -1,4 +1,4 @@
-liblsl # PyGame, liblsl, and pylsl might work better with conda on unix
+# liblsl # PyGame, liblsl, and pylsl might work better with conda on unix
 pylsl
 pyaudio
 pygame
