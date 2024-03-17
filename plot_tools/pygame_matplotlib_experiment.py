@@ -14,8 +14,8 @@ raw = load_openbci_txt(sample_file_path)
 brainflow_raw = create_new_raw_with_brainflow_filters_applied(raw)
 
 raw.filter(l_freq=1.0, h_freq=45.0)
-raw.notch_filter(50, notch_widths=4, filter_length='auto', phase='zero', fir_design='firwin')
-raw.notch_filter(60, notch_widths=4, filter_length='auto', phase='zero', fir_design='firwin')
+raw.notch_filter(50, notch_widths=4)
+raw.notch_filter(60, notch_widths=4)
 raw.plot()
 
 psd = raw.compute_psd()
