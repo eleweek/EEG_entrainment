@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-import mne
 from libs.file_formats import load_openbci_txt
 from libs.filters import create_new_raw_with_brainflow_filters_applied
 

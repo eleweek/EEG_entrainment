@@ -61,7 +61,6 @@ while t<t_n:
         # Update screen
         pygame.event.get()
         screen.fill(wht)
-        device_info_text = font.render(device_info, True, gry)
         screen.blit(device_info_text,device_info_rect)
         trial_text = f"Most recent RMS: {most_recent_RMS}"
         text = font.render(trial_text, True, gry) 
