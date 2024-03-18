@@ -60,10 +60,12 @@ brainflow_psd = brainflow_raw.compute_psd()
 brainflow_psd_fig = brainflow_psd.plot(average=True, show=False)
 
 
+pygame_running = True
+while pygame_running:
+    for event  in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame_running = False
 
-while True:
-    # Update screen
-    pygame.event.get()
     screen.fill(wht)
     screen.blit(device_info_text,device_info_rect)
     trial_text = f"Most recent RMS: some_test"
