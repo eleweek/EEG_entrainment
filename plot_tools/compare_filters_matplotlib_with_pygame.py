@@ -46,9 +46,8 @@ device_info_rect = device_info_text.get_rect(center=(screen_width/4, (screen_hei
 raw = load_openbci_txt(sample_file_path)
 brainflow_raw = create_new_raw_with_brainflow_filters_applied(raw)
 
-raw.filter(l_freq=1.0, h_freq=45.0)
+raw.filter(l_freq=1.0, h_freq=45.0, method="iir", iir_params=None)
 raw.notch_filter(50, notch_widths=4)
-raw.notch_filter(60, notch_widths=4)
 raw_plot_fig = raw.plot(duration=20, show=False, show_scrollbars=False, show_scalebars=False, block=False)
 print(type(raw_plot_fig), raw_plot_fig)
 
