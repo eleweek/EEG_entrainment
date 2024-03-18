@@ -49,15 +49,15 @@ brainflow_raw = create_new_raw_with_brainflow_filters_applied(raw)
 raw.filter(l_freq=1.0, h_freq=45.0)
 raw.notch_filter(50, notch_widths=4)
 raw.notch_filter(60, notch_widths=4)
-raw_plot_fig = raw.plot(show=False)
+raw_plot_fig = raw.plot(duration=20, show=False, show_scrollbars=False, show_scalebars=False, block=False)
 print(type(raw_plot_fig), raw_plot_fig)
 
 psd = raw.compute_psd()
-psd.plot(average=True, show=False)
+psd_plot_fig = psd.plot(average=True, show=False)
 
 brainflow_raw.plot(show=False)
 brainflow_psd = brainflow_raw.compute_psd()
-brainflow_psd.plot(average=True, show=False)
+brainflow_psd_fig = brainflow_psd.plot(average=True, show=False)
 
 
 
@@ -69,5 +69,10 @@ while True:
     trial_text = f"Most recent RMS: some_test"
     text = font.render(trial_text, True, gry) 
     screen.blit(text, text_rect)
-    screen.blit(plot_to_pygame(raw_plot_fig), (0, 0))
+    psd_plot_pygame_image = plot_to_pygame(psd_plot_fig)
+
+    brainflow_psd_plot_pygame_image = plot_to_pygame(brainflow_psd_fig)
+
+    screen.blit(psd_plot_pygame_image, (0, 0))
+    screen.blit(brainflow_psd_plot_pygame_image, (0, psd_plot_pygame_image.get_height() + 20))
     pygame.display.flip()
