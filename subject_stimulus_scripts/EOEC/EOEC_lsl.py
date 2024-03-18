@@ -14,7 +14,7 @@ from pylsl import StreamInfo, StreamOutlet, StreamInlet, resolve_stream
 
 # Confirm status
 live_run = False
-output_device_num = 0  # 0 is default, but might need to pick 4 for multi
+output_device_num = 6  # 0 is default, but might need to pick 4 for multi, or python -m sounddevice to list 
 audio_channels = 2
 
 
@@ -29,7 +29,7 @@ wht = (255,255,255)
 
 # Init, get files
 path_here = os.getcwd()
-audio_file_path = os.path.join(path_here,'EOEC')
+audio_file_path = os.path.join(path_here,'subject_stimulus_scripts','EOEC')
 
 # start PyAudio
 p = pyaudio.PyAudio()
@@ -64,7 +64,7 @@ def load_sound(filename):
 # Setup trial struct
 n_trials_per_block = 2
 n_blocks = 3
-audio_filenames = ['/open.wav','/closed.wav']
+audio_filenames = ['/open.wav','/close.wav']
 
 # make at least n_trials with alternating audio_filenames
 trials_structure = audio_filenames * n_blocks
