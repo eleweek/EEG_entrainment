@@ -21,14 +21,18 @@ def load_openbci_txt(file_path):
 def load_raw_xdf(file_path):
     streams, _ = pyxdf.load_xdf(file_path)
     eeg_stream = None
+    markers_stream = None
+
     for stream in streams:
-        if stream['info']['name'][0] == 'openbci_eeg':
+        stream_type = stream['info']['type'][0]
+        if stream_type == 'EEG':
             eeg_stream = stream
-            break
+        elif stream_type == 'Markers':
+            markers_stream = stream        
 
     if eeg_stream is None:
         raise ValueError('No EEG stream found in the XDF file')
-
+    
     channel_descs = eeg_stream['info']['desc'][0]['channels'][0]["channel"]
     assert all(ch_desc['type'][0] == 'EEG' for ch_desc in channel_descs)
 
@@ -36,10 +40,18 @@ def load_raw_xdf(file_path):
     
     sfreq = eeg_stream['info']['nominal_srate'][0]
     data = 1e-6 * eeg_stream['time_series'].T
-    print(data.shape)
 
-    print(len(ch_names), ch_names)
     info = mne.create_info(ch_names, sfreq, ch_types='eeg', verbose=False)
     raw = mne.io.RawArray(data, info, verbose=False)
+
+    if markers_stream is not None:
+        eeg_start_time = eeg_stream['time_stamps'][0]
+
+        onset = markers_stream['time_stamps'][:-1] - eeg_start_time
+        duration = markers_stream['time_stamps'][1:] - onset - eeg_start_time
+        description = [ts[0].split(' ')[2].rstrip('.wav') for ts in markers_stream['time_series'][:-1]]
+        annotations = mne.Annotations(onset, duration, description)
+
+        raw.set_annotations(annotations)
 
     return raw
