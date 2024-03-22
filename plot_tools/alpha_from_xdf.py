@@ -19,10 +19,10 @@ def one_over_f(freq, alpha, beta):
 raw = load_raw_xdf(sys.argv[1])
 filter_and_drop_dead_channels(raw)
 
-psd = raw.compute_psd(fmin=1.0, fmax=45.0)
+psd = raw.compute_psd(fmin=1.0, fmax=60.0)
 peak_alpha_freq = get_peak_alpha_freq(psd)
 
-psd_values, psd_freqs = raw.compute_psd(fmin=1.0, fmax=45.0).get_data(return_freqs=True)
+psd_values, psd_freqs = psd.get_data(return_freqs=True)
 
 psd_values_db = 10 * np.log10(psd_values * 1e6 * 1e6) 
 psd_mean = np.mean(psd_values_db, axis=0)
@@ -39,6 +39,8 @@ fitted_curve = one_over_f(psd_freqs[fit_freq_range], alpha, beta)
 fig = psd.plot(average=True, show=False)
 ax = fig.get_axes()[0]
 ax.plot(psd_freqs[fit_freq_range], fitted_curve, label='1/f fit', linewidth=1, color='darkmagenta')
-add_red_line_with_value(fig, peak_alpha_freq)
+
+delta_db = psd_mean[np.where(psd_freqs == peak_alpha_freq)][0] - one_over_f(peak_alpha_freq, alpha, beta)
+add_red_line_with_value(fig, peak_alpha_freq, delta_db)
 
 plt.show()
