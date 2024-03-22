@@ -28,9 +28,10 @@ psd_values_db = 10 * np.log10(psd_values * 1e6 * 1e6)
 psd_mean = np.mean(psd_values_db, axis=0)
 
 
-fit_freq_range = (psd_freqs > 3) & (psd_freqs < 20)  # Adjust the range as needed
+fit_freq_range = (psd_freqs > 3) & (psd_freqs < 40)  # Adjust the range as needed
 
 popt, _ = curve_fit(one_over_f, psd_freqs[fit_freq_range], psd_mean[fit_freq_range])
+
 alpha, beta = popt
 fitted_curve = one_over_f(psd_freqs[fit_freq_range], alpha, beta)
 
