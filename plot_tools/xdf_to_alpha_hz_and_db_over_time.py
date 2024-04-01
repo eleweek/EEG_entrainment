@@ -1,6 +1,7 @@
 import sys
 
 import mne
+import mpld3
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -9,22 +10,29 @@ from libs.filters import filter_and_drop_dead_channels
 from libs.plot import add_red_line_with_value
 from libs.psd import get_peak_alpha_freq, fit_one_over_f_curve
 
+input_xdf_filename = sys.argv[1]
+output_report_filename = sys.argv[2]
+
 # Load the MNE Raw file
-raw = load_raw_xdf(sys.argv[1])
+raw = load_raw_xdf(input_xdf_filename)
 filter_and_drop_dead_channels(raw)
 
-chunk_duration = 10.0
+chunk_duration = 30.0
+chunk_shift = 5
 
-n_chunks = int(np.floor(raw.times[-1] / chunk_duration))
+n_chunks = int(np.floor((raw.times[-1] - chunk_duration) / chunk_shift)) + 1
+
 
 peak_alpha_freqs = []
 dbs = []
 
+psd_figs = []
+
 # Iterate over the raw data in chunks
 for i in range(n_chunks):
     print(f'Processing chunk {i + 1}/{n_chunks}')
-    tmin = i * chunk_duration
-    tmax = (i + 1) * chunk_duration
+    tmin = i * chunk_shift
+    tmax = i * chunk_shift + chunk_duration
     
     # Get the data for the current chunk
     chunk_data = raw.copy().crop(tmin=tmin, tmax=tmax)
@@ -36,6 +44,7 @@ for i in range(n_chunks):
     psd_freqs, fit_freq_range, fitted_curve, delta_db = fit_one_over_f_curve(psd, min_freq=3, max_freq=40, peak_alpha_freq=peak_alpha_freq)
 
     fig = psd.plot(average=True, show=False)
+    psd_figs.append(fig)
     ax = fig.get_axes()[0]
     ax.plot(psd_freqs[fit_freq_range], fitted_curve, label='1/f fit', linewidth=1, color='darkmagenta')
 
@@ -45,18 +54,44 @@ for i in range(n_chunks):
     dbs.append(delta_db)
 
 # Create the first chart for peak alpha frequency
-fig, ax = plt.subplots()
-ax.plot(np.arange(n_chunks) * chunk_duration, peak_alpha_freqs)
-ax.set_xlabel('Time (s)')
-ax.set_ylabel('Peak Alpha Frequency (Hz)')
-ax.set_title('Peak Alpha Frequency over Time')
+fig1, ax1 = plt.subplots()
+ax1.plot(np.arange(n_chunks) * chunk_duration, peak_alpha_freqs)
+ax1.set_xlabel('Time (s)')
+ax1.set_ylabel('Peak Alpha Frequency (Hz)')
+ax1.set_title('Peak Alpha Frequency over Time')
 
 # Create the second chart for dB
-fig, ax = plt.subplots()
-ax.plot(np.arange(n_chunks) * chunk_duration, dbs)
-ax.set_xlabel('Time (s)')
-ax.set_ylabel('Decibel (dB)')
-ax.set_title('Decibel over Time')
+fig2, ax2 = plt.subplots()
+ax2.plot(np.arange(n_chunks) * chunk_duration, dbs)
+ax2.set_xlabel('Time (s)')
+ax2.set_ylabel('Delta peak (dB)')
+ax2.set_title('Delta peak over time')
 
 # Display the charts
-plt.show()
+# plt.show()
+
+fig1_html = mpld3.fig_to_html(fig1)
+fig2_html = mpld3.fig_to_html(fig2)
+
+html_template = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>EEG Analysis Report</title>
+</head>
+<body>
+    <h1>EEG Analysis Report</h1>
+    <h2>Peak Alpha Frequency over Time (Last 3 Channels)</h2>
+    {fig1}
+    <h2>Decibel over Time (Last 3 Channels)</h2>
+    {fig2}
+
+    <h2>PSD for each chunk</h2>
+    {figs}
+</body>
+</html>
+"""
+
+report_html = html_template.format(fig1=fig1_html, fig2=fig2_html, figs=''.join(mpld3.fig_to_html(fig) for fig in psd_figs))
+with open(output_report_filename, 'w') as f:
+    f.write(report_html)
