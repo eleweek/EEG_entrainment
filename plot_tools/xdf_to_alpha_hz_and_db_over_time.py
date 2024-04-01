@@ -1,4 +1,6 @@
+import base64
 import sys
+from io import BytesIO
 
 import mne
 import mpld3
@@ -9,6 +11,17 @@ from libs.file_formats import load_raw_xdf
 from libs.filters import filter_and_drop_dead_channels
 from libs.plot import add_red_line_with_value
 from libs.psd import get_peak_alpha_freq, fit_one_over_f_curve
+
+
+def matplotlib_to_img(fig):
+    img_buffer = BytesIO()
+    fig.savefig(img_buffer, format='png')
+    plt.close(fig)
+    
+    # Base64 encode the image
+    img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+
+    return img_base64
 
 input_xdf_filename = sys.argv[1]
 output_report_filename = sys.argv[2]
@@ -87,11 +100,11 @@ html_template = """
     {fig2}
 
     <h2>PSD for each chunk</h2>
-    {figs}
+    {psd_images_html}
 </body>
 </html>
 """
 
-report_html = html_template.format(fig1=fig1_html, fig2=fig2_html, figs=''.join(mpld3.fig_to_html(fig) for fig in psd_figs))
+report_html = html_template.format(fig1=fig1_html, fig2=fig2_html, psd_images_html=''.join([f'<img src="data:image/png;base64,{matplotlib_to_img(fig)}">' for fig in psd_figs]))
 with open(output_report_filename, 'w') as f:
     f.write(report_html)
