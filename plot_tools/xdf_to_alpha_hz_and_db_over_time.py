@@ -35,8 +35,8 @@ output_report_filename = sys.argv[2]
 raw = load_raw_xdf(input_xdf_filename)
 filter_and_drop_dead_channels(raw)
 
-chunk_duration = 30.0
-chunk_shift = 5
+chunk_duration = 15.0
+chunk_shift = 3
 
 n_chunks = int(np.floor((raw.times[-1] - chunk_duration) / chunk_shift)) + 1
 
@@ -100,9 +100,9 @@ html_template = """
 </head>
 <body>
     <h1>EEG Analysis Report</h1>
-    <h2>Peak Alpha Frequency over Time (Last 3 Channels)</h2>
+    <h2>Peak Alpha Frequency over Time</h2>
     {fig1}
-    <h2>Decibel over Time (Last 3 Channels)</h2>
+    <h2>Decibel over Time</h2>
     {fig2}
 
     <h2>PSD for each chunk</h2>
