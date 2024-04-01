@@ -6,11 +6,30 @@ import mne
 import mpld3
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
 from libs.file_formats import load_raw_xdf
 from libs.filters import filter_and_drop_dead_channels
 from libs.plot import add_red_line_with_value
 from libs.psd import get_peak_alpha_freq, fit_one_over_f_curve
+
+
+parser = argparse.ArgumentParser(
+                    prog='xdf_to_alpha_hz_and_db_over_time',
+                    description='Creates a report with the peak alpha frequency and delta peak over time, dumps PSD plots for each chunk',
+)
+parser.add_argument('input_xdf_filename', type=str, help='Path to the XDF file')
+parser.add_argument('output_report_filename', type=str, help='Path to the output HTML report file')
+
+parser.add_argument('--chunk_duration', type=float, default=90.0, help='Duration of each chunk in seconds')
+parser.add_argument('--chunk_shift', type=float, default=0.5, help='Shift between chunks in seconds')
+
+args = parser.parse_args()
+
+input_xdf_filename = args.input_xdf_filename
+output_report_filename = args.output_report_filename
+chunk_duration = args.chunk_duration
+chunk_shift = args.chunk_shift
 
 
 def matplotlib_to_img(fig):
@@ -28,15 +47,13 @@ def format_time(seconds):
     seconds = int(seconds % 60)
     return f'{minutes:02}:{seconds:02}'
 
-input_xdf_filename = sys.argv[1]
-output_report_filename = sys.argv[2]
+
 
 # Load the MNE Raw file
 raw = load_raw_xdf(input_xdf_filename)
 filter_and_drop_dead_channels(raw)
 
-chunk_duration = 15.0
-chunk_shift = 3
+
 
 n_chunks = int(np.floor((raw.times[-1] - chunk_duration) / chunk_shift)) + 1
 
@@ -74,14 +91,14 @@ for i in range(n_chunks):
 
 # Create the first chart for peak alpha frequency
 fig1, ax1 = plt.subplots()
-ax1.plot(np.arange(n_chunks) * chunk_duration, peak_alpha_freqs)
+ax1.plot(np.arange(n_chunks) * chunk_shift, peak_alpha_freqs)
 ax1.set_xlabel('Time (s)')
 ax1.set_ylabel('Peak Alpha Frequency (Hz)')
 ax1.set_title('Peak Alpha Frequency over Time')
 
 # Create the second chart for dB
 fig2, ax2 = plt.subplots()
-ax2.plot(np.arange(n_chunks) * chunk_duration, dbs)
+ax2.plot(np.arange(n_chunks) * chunk_shift, dbs)
 ax2.set_xlabel('Time (s)')
 ax2.set_ylabel('Delta peak (dB)')
 ax2.set_title('Delta peak over time')
