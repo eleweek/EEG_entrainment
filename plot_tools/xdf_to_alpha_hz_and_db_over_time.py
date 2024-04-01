@@ -23,6 +23,11 @@ def matplotlib_to_img(fig):
 
     return img_base64
 
+def format_time(seconds):
+    minutes = int(seconds // 60)
+    seconds = int(seconds % 60)
+    return f'{minutes:02}:{seconds:02}'
+
 input_xdf_filename = sys.argv[1]
 output_report_filename = sys.argv[2]
 
@@ -60,6 +65,7 @@ for i in range(n_chunks):
     psd_figs.append(fig)
     ax = fig.get_axes()[0]
     ax.plot(psd_freqs[fit_freq_range], fitted_curve, label='1/f fit', linewidth=1, color='darkmagenta')
+    ax.set_title(f'PSD for time {format_time(tmin)}..{format_time(tmax)}')
 
     add_red_line_with_value(fig, peak_alpha_freq, delta_db)
     
