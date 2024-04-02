@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 
 from libs.file_formats import load_raw_xdf
 from libs.filters import filter_and_drop_dead_channels
+from libs.plot import add_red_line_with_value, plot_psd
 
 
 def concatenate_and_get_psd(raws):
@@ -25,11 +26,6 @@ def get_raws_from_annotations(annotations, type):
 
     return chunks
 
-def plot_psd(psd, title):
-    fig = psd.plot(average=True)
-    ax = fig.get_axes()[0]
-    ax.set_title(title)
-
 
 def plot_subtracted_data(subtracted_data, freqs):
     median_data = np.median(subtracted_data, axis=0)
@@ -41,6 +37,9 @@ def plot_subtracted_data(subtracted_data, freqs):
     ax.set_xlabel('Frequency (Hz)')
     ax.set_ylabel('Power')
     ax.set_title("Eyes closed - Eyes open")
+
+    peak_alpha_freq = freqs[np.argmax(median_data[freq_idx:]) + freq_idx]
+    add_red_line_with_value(fig, peak_alpha_freq, None)
 
     plt.show()
 
