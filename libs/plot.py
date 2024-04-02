@@ -9,10 +9,15 @@ def add_red_line_with_value(fig, value, delta_db):
         y_min, y_max = ax.get_ylim()
         y_shift = (y_max - y_min) * 0.05  # Adjust the multiplication factor as needed
 
+        if delta_db is not None:
+            text = f'{value:.2f} Hz, {delta_db:.2f} dB'
+        else:
+            text = f'{value:.2f} Hz'
+
         offset = matplotlib.transforms.ScaledTranslation(2/72, 0, fig.dpi_scale_trans)
         text_transform = ax.transData + offset
 
-        ax.text(value, y_max - y_shift, f'{value:.2f} Hz' + f', {delta_db:.2f} dB' if delta_db is not None else '',
+        ax.text(value, y_max - y_shift, text,
                 ha='left', va='top', color='red', fontsize=8, transform=text_transform)
 
 
