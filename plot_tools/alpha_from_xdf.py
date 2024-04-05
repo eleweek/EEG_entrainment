@@ -2,11 +2,104 @@ import sys
 
 import numpy as np
 
+import mne
+from mne.time_frequency import tfr_multitaper, tfr_stockwell, tfr_morlet
 import matplotlib.pyplot as plt
 
 from libs.file_formats import load_raw_xdf
 from libs.filters import filter_and_drop_dead_channels
 from libs.plot import plot_psd
+
+def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, stockwell=False):
+    BASELINE = (0.0, 0.1)
+
+    # Create a single, large epoch encompassing the entire raw object
+    # Define events: one event at the first sample and its ID
+    events = np.array([[0, 0, 1]])
+    # Define epoching around the entire duration
+    event_id = dict(whole_recording=1)
+    epochs = mne.Epochs(raw, events=events, event_id=event_id, tmin=raw.times[0], tmax=raw.times[-1], baseline=None, preload=True)
+
+    freqs = np.arange(7.0, 16.0, 0.25)
+
+    fig_main, ax_main = plt.subplots(1, 1, figsize=(10, 5))
+
+    if single_best_plot:
+        power = tfr_multitaper(
+            epochs,
+            freqs=freqs,
+            n_cycles=len(freqs),
+            time_bandwidth=2.0,
+            return_itc=False,
+        )
+
+
+        power.plot(
+            [0],
+            # baseline=(0, 1.0),
+            mode="mean",
+            axes=ax_main,
+            show=False,
+            colorbar=True,
+        )
+
+    if multitaper:
+        fig, axs = plt.subplots(1, 3, figsize=(15, 5), sharey=True, layout="constrained")
+        for n_cycles, time_bandwidth, ax, title in zip(
+            [freqs / 2, freqs, freqs / 2],  # number of cycles
+            [2.0, 4.0, 8.0],  # time bandwidth
+            axs,
+            [
+                "Least smoothing, most variance",
+                "Less frequency smoothing,\nmore time smoothing",
+                "Less time smoothing,\nmore frequency smoothing",
+            ],
+        ):
+            power = tfr_multitaper(
+                epochs,
+                freqs=freqs,
+                n_cycles=n_cycles,
+                time_bandwidth=time_bandwidth,
+                return_itc=False,
+            )
+            ax.set_title(title)
+            # Plot results. Baseline correct based on first 100 ms.
+            power.plot(
+                [0],
+                baseline=BASELINE,
+                mode="mean",
+                axes=ax,
+                show=False,
+                colorbar=False,
+            )
+
+    if morlet:
+        fig, axs = plt.subplots(1, 3, figsize=(15, 5), sharey=True, layout="constrained")
+
+        all_n_cycles = [1, 3, freqs / 2.0]
+        for n_cycles, ax in zip(all_n_cycles, axs):
+            power = tfr_morlet(epochs, freqs=freqs, n_cycles=n_cycles, return_itc=False)
+            power.plot(
+                [0],
+                mode="mean",
+                baseline=BASELINE,
+                axes=ax,
+                show=False,
+                colorbar=False,
+            )
+            n_cycles = "scaled by freqs" if not isinstance(n_cycles, int) else n_cycles
+            ax.set_title(f"Using Morlet wavelet, n_cycles = {n_cycles}")
+
+    if stockwell:
+        fig, axs = plt.subplots(1, 3, figsize=(15, 5), sharey=True, layout="constrained")
+
+        fmin, fmax = freqs[[0, -1]]
+        for width, ax in zip((0.2, 0.7, 3.0), axs):
+            power = tfr_stockwell(epochs, fmin=fmin, fmax=fmax, width=width)
+            power.plot(
+                [0], baseline=BASELINE, mode="mean", axes=ax, show=False, colorbar=False
+            )
+            ax.set_title("Using S transform, width = {:0.1f}".format(width))
 
 
 raw = load_raw_xdf(sys.argv[1])
@@ -14,5 +107,7 @@ filter_and_drop_dead_channels(raw)
 
 psd = raw.compute_psd(fmin=1.0, fmax=60.0)
 plot_psd(psd, title="PSD of the whole recording")
+
+plot_spectrogram(raw.copy(), single_best_plot=True, multitaper=True, morlet=False, stockwell=False)
 
 plt.show()
