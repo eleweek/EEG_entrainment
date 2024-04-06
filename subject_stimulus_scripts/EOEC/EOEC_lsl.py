@@ -107,7 +107,7 @@ while t<t_n:
         trial_text_here = f"Trial {t+1} Sec {pt+1} - Now, please ensure eyes are {trials_structure[t][1:-4]}"
         text = font.render(trial_text_here, True, gry)
         screen.blit(text, text_rect)
-        pygame.display.flip()
+        display_report = pygame.display.flip()
 
         if pt==1:  
             splay1 = s1.readframes(s1.getnframes())
