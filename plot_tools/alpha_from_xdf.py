@@ -1,4 +1,5 @@
 import sys 
+import argparse
 
 import numpy as np
 
@@ -9,6 +10,20 @@ import matplotlib.pyplot as plt
 from libs.file_formats import load_raw_xdf
 from libs.filters import filter_and_drop_dead_channels
 from libs.plot import plot_psd
+from libs.parse import parse_picks
+
+parser = argparse.ArgumentParser(
+                    prog='alpha_from_xdf',
+                    description='Creates an alpha frequency plot and spectrograms from an XDF file')
+
+parser.add_argument('input_xdf_filename', type=str, help='Path to the XDF file')
+parser.add_argument('--picks', type=str, default=None, help='Comma or space-separated list of channels to use')
+parser.add_argument('--separate-channels', action='store_true', help='Plot each channel separately')
+
+args = parser.parse_args()
+input_xdf_filename = args.input_xdf_filename
+picks = parse_picks(args.picks)
+separate_channels = args.separate_channels
 
 def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, stockwell=False):
     BASELINE = (0.0, 0.1)
@@ -102,12 +117,12 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
             ax.set_title("Using S transform, width = {:0.1f}".format(width))
 
 
-raw = load_raw_xdf(sys.argv[1])
-filter_and_drop_dead_channels(raw)
+raw = load_raw_xdf(input_xdf_filename)
+filter_and_drop_dead_channels(raw, picks)
 
 psd = raw.compute_psd(fmin=1.0, fmax=60.0)
-plot_psd(psd, title="PSD of the whole recording")
+plot_psd(psd, title="PSD of the whole recording, channels = " + " ".join(raw.ch_names), average=not separate_channels)
 
-plot_spectrogram(raw.copy(), single_best_plot=True, multitaper=True, morlet=False, stockwell=False)
+plot_spectrogram(raw.copy(), single_best_plot=True, multitaper=False, morlet=False, stockwell=False)
 
 plt.show()

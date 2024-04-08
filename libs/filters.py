@@ -5,7 +5,7 @@ from brainflow.data_filter import DataFilter, FilterTypes, NoiseTypes
 
 import numpy as np
 
-def filter_and_drop_dead_channels(raw):
+def filter_and_drop_dead_channels(raw, picks):
     data = raw.get_data()
     for channel in range(raw.info['nchan']):
         if np.all(data[channel] == data[channel][0]):
@@ -15,6 +15,7 @@ def filter_and_drop_dead_channels(raw):
     raw.filter(l_freq=1.0, h_freq=45.0, verbose=False)
     raw.notch_filter(50, notch_widths=4, verbose=False)
 
+    raw.pick(picks)
 
 def create_new_raw_with_brainflow_filters_applied(raw):
     data = raw.get_data()

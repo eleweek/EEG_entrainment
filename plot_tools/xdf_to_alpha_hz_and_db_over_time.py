@@ -1,5 +1,6 @@
 import base64
 import sys
+import re
 from io import BytesIO
 
 import mne
@@ -12,6 +13,7 @@ from libs.file_formats import load_raw_xdf
 from libs.filters import filter_and_drop_dead_channels
 from libs.plot import add_red_line_with_value
 from libs.psd import get_peak_alpha_freq, fit_one_over_f_curve
+from libs.parse import parse_picks
 
 
 parser = argparse.ArgumentParser(
@@ -23,6 +25,7 @@ parser.add_argument('output_report_filename', type=str, help='Path to the output
 
 parser.add_argument('--chunk_duration', type=float, default=90.0, help='Duration of each chunk in seconds')
 parser.add_argument('--chunk_shift', type=float, default=0.5, help='Shift between chunks in seconds')
+parser.add_argument('--picks', type=str, default=None, help='Comma or space-separated list of channels to use')
 
 args = parser.parse_args()
 
@@ -30,6 +33,7 @@ input_xdf_filename = args.input_xdf_filename
 output_report_filename = args.output_report_filename
 chunk_duration = args.chunk_duration
 chunk_shift = args.chunk_shift
+picks = parse_picks(args.picks)
 
 
 def matplotlib_to_img(fig):
@@ -52,6 +56,7 @@ def format_time(seconds):
 # Load the MNE Raw file
 raw = load_raw_xdf(input_xdf_filename)
 filter_and_drop_dead_channels(raw)
+raw.pick(picks)
 
 
 
