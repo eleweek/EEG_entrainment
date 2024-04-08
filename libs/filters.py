@@ -17,6 +17,9 @@ def filter_and_drop_dead_channels(raw, picks):
 
     raw.pick(picks)
 
+    raw.set_montage('standard_1020')
+
+
 def create_new_raw_with_brainflow_filters_applied(raw):
     data = raw.get_data()
     sampling_rate = BoardShim.get_sampling_rate(BoardIds.CYTON_BOARD.value)

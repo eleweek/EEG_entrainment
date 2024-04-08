@@ -55,8 +55,7 @@ def format_time(seconds):
 
 # Load the MNE Raw file
 raw = load_raw_xdf(input_xdf_filename)
-filter_and_drop_dead_channels(raw)
-raw.pick(picks)
+filter_and_drop_dead_channels(raw, args.picks)
 
 
 

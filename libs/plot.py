@@ -25,7 +25,7 @@ def plot_psd(psd, title=None, average=True):
     peak_alpha_freq = get_peak_alpha_freq(psd)
     psd_freqs, fit_freq_range, fitted_curve, delta_db = fit_one_over_f_curve(psd, min_freq=3, max_freq=40, peak_alpha_freq=peak_alpha_freq)
 
-    fig = psd.plot(average=average, show=False)
+    fig = psd.plot(average=average, show=False, spatial_colors=True)
     ax = fig.get_axes()[0]
     ax.plot(psd_freqs[fit_freq_range], fitted_curve, label='1/f fit', linewidth=1, color='darkmagenta')
     
