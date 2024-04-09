@@ -77,7 +77,7 @@ for i in range(n_chunks):
     # Get the data for the current chunk
     chunk_data = raw.copy().crop(tmin=tmin, tmax=tmax)
 
-    psd = chunk_data.compute_psd(fmin=1.0, fmax=60.0)
+    psd = chunk_data.compute_psd(fmin=1.0, fmax=45.0)
 
     fig, iaf_stats = plot_psd(psd, title=f'PSD for time {format_time(tmin)}..{format_time(tmax)}', average=not separate_channels)
     

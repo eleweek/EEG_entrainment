@@ -120,7 +120,7 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
 raw = load_raw_xdf(input_xdf_filename)
 filter_and_drop_dead_channels(raw, picks)
 
-psd = raw.compute_psd(fmin=1.0, fmax=60.0)
+psd = raw.compute_psd(fmin=1.0, fmax=45.0)
 plot_psd(psd, title="PSD of the whole recording, channels = " + " ".join(raw.ch_names), average=not separate_channels)
 
 plot_spectrogram(raw.copy(), single_best_plot=True, multitaper=False, morlet=False, stockwell=False)
