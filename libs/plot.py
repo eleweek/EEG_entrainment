@@ -1,4 +1,7 @@
 import matplotlib
+import matplotlib.pyplot as plt
+
+from mne.viz import plot_sensors
 
 from libs.psd import fit_one_over_f_curve, get_peak_alpha_freq
 
@@ -23,17 +26,36 @@ def add_red_line_with_value(fig, value, delta_db):
 
 
 def plot_psd(psd, title=None, average=True):
+    # TODO: do our own custom mapping of electrodes to colors
+    COLOR_VALUES = ["brown", "red", "orange", "magenta", "green", "blue", "purple", "black"]
+
     peak_alpha_freq = get_peak_alpha_freq(psd)
     psd_freqs, fit_freq_range, fitted_curve, delta_db = fit_one_over_f_curve(psd, min_freq=3, max_freq=40, peak_alpha_freq=peak_alpha_freq)
 
     fig = psd.plot(average=average, show=False, spatial_colors=True)
 
-    ax = fig.get_axes()[0]
-    ax.plot(psd_freqs[fit_freq_range], fitted_curve, label='1/f fit', linewidth=1, color='darkmagenta')
+    axes = fig.get_axes()
+    main_ax = axes[0]
     
     if title is not None:
-        ax.set_title(title)
+        main_ax.set_title(title)
 
+    if not average and len(axes) != 2:
+        raise Exception(f'Expected 2 axes, got {len(axes)}')
+    
+    if not average:
+        sensor_ax = axes[1]
 
+        lines = main_ax.get_lines()
+        for i, line in enumerate(lines):
+            if 1 < i <= len(psd.ch_names) + 1: 
+                line.set_color(COLOR_VALUES[i - 2])
+    
 
+        scatter_collection = sensor_ax.collections[0]
+        scatter_collection.set_facecolors(COLOR_VALUES)
+        scatter_collection.set_edgecolors(COLOR_VALUES)
+
+    
+    main_ax.plot(psd_freqs[fit_freq_range], fitted_curve, label='1/f fit', linewidth=1, color='darkmagenta')
     add_red_line_with_value(fig, peak_alpha_freq, delta_db)
