@@ -11,8 +11,7 @@ import argparse
 
 from libs.file_formats import load_raw_xdf
 from libs.filters import filter_and_drop_dead_channels
-from libs.plot import add_red_line_with_value
-from libs.psd import get_peak_alpha_freq, fit_one_over_f_curve
+from libs.plot import plot_psd
 from libs.parse import parse_picks
 
 
@@ -26,6 +25,7 @@ parser.add_argument('output_report_filename', type=str, help='Path to the output
 parser.add_argument('--chunk_duration', type=float, default=90.0, help='Duration of each chunk in seconds')
 parser.add_argument('--chunk_shift', type=float, default=0.5, help='Shift between chunks in seconds')
 parser.add_argument('--picks', type=str, default=None, help='Comma or space-separated list of channels to use')
+parser.add_argument('--separate-channels', action='store_true', help='Plot each channel separately')
 
 args = parser.parse_args()
 
@@ -34,6 +34,7 @@ output_report_filename = args.output_report_filename
 chunk_duration = args.chunk_duration
 chunk_shift = args.chunk_shift
 picks = parse_picks(args.picks)
+separate_channels = args.separate_channels
 
 
 def matplotlib_to_img(fig):
@@ -55,7 +56,7 @@ def format_time(seconds):
 
 # Load the MNE Raw file
 raw = load_raw_xdf(input_xdf_filename)
-filter_and_drop_dead_channels(raw, args.picks)
+filter_and_drop_dead_channels(raw, picks)
 
 
 
@@ -78,20 +79,11 @@ for i in range(n_chunks):
 
     psd = chunk_data.compute_psd(fmin=1.0, fmax=60.0)
 
-    # Call the functions to get peak alpha frequency and dB
-    peak_alpha_freq = get_peak_alpha_freq(psd)
-    psd_freqs, fit_freq_range, fitted_curve, delta_db = fit_one_over_f_curve(psd, min_freq=3, max_freq=40, peak_alpha_freq=peak_alpha_freq)
-
-    fig = psd.plot(average=True, show=False)
-    psd_figs.append(fig)
-    ax = fig.get_axes()[0]
-    ax.plot(psd_freqs[fit_freq_range], fitted_curve, label='1/f fit', linewidth=1, color='darkmagenta')
-    ax.set_title(f'PSD for time {format_time(tmin)}..{format_time(tmax)}')
-
-    add_red_line_with_value(fig, peak_alpha_freq, delta_db)
+    fig, iaf_stats = plot_psd(psd, title=f'PSD for time {format_time(tmin)}..{format_time(tmax)}', average=not separate_channels)
     
-    peak_alpha_freqs.append(peak_alpha_freq)
-    dbs.append(delta_db)
+    psd_figs.append(fig)
+    peak_alpha_freqs.append(iaf_stats.peak_alpha_freq)
+    dbs.append(iaf_stats.delta_db)
 
 # Create the first chart for peak alpha frequency
 fig1, ax1 = plt.subplots()
