@@ -66,6 +66,7 @@ while True:
     all_data = all_data[-int(sampling_rate) * max_seconds:]
     print("All data", len(all_data))
     print("Pulled data", len(data))
+    print("Timestamps", timestamps)
 
 
     if len(data) > 0:
