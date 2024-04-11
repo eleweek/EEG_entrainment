@@ -60,9 +60,9 @@ while pygame_running:
 
     screen.fill(wht)
     
-    psd_plot_pygame_image = plot_to_pygame(psd_plot_fig)
+    psd_plot_pygame_image = plot_to_pygame(agg, psd_plot_fig)
 
-    brainflow_psd_plot_pygame_image = plot_to_pygame(brainflow_psd_fig)
+    brainflow_psd_plot_pygame_image = plot_to_pygame(agg, brainflow_psd_fig)
 
     screen.blit(psd_plot_pygame_image, (LEFT_MARGIN, TOP_MARGIN))
     screen.blit(brainflow_psd_plot_pygame_image, 
