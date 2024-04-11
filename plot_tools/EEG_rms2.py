@@ -4,6 +4,7 @@ import numpy as np
 import mne
 from mne_lsl.lsl import resolve_streams, StreamInlet
 
+from libs.filters import filter_and_drop_dead_channels
 from libs.parse import get_channels_from_xml_desc, print_xml_element
 
 streams = resolve_streams()
@@ -30,22 +31,29 @@ print("Sampling rate:", sampling_rate)
 print("Units:", stream_info.get_channel_units())
 
 
-window_samples = 250
-
+all_data = []
 
 while True:
     # Pull data from the LSL stream
-    data, timestamps = inlet.pull_chunk(max_samples=window_samples)
+    data, timestamps = inlet.pull_chunk()
+
+    all_data.extend(data)
 
     if len(data) > 0:
         # Convert data to a NumPy array
-        data_array = np.array(data)
+        all_data_array = np.array(all_data)
+        print(f"All data shape: {all_data_array.shape}")
 
-        
+        raw = mne.io.RawArray(all_data_array.T, mne.create_info(names, sampling_rate, ch_types='eeg'))
+        raw.set_montage('standard_1020')
+        filter_and_drop_dead_channels(raw, None)
 
-        uvrms = np.sqrt(np.mean(data_array ** 2, axis=0))
+        start_index = len(raw.times) - int(sampling_rate)
+        last_second_data = raw.get_data(start=start_index)
+
+        uvrms = np.sqrt(np.mean(last_second_data ** 2, axis=1))
 
         print("uVRMS:", uvrms)
 
     
-    time.sleep(1.0)
+    time.sleep(0.3)
