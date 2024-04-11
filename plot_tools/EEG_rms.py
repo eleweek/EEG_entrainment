@@ -6,6 +6,7 @@ import numpy as np
 import pygame
 from pylsl import StreamInfo, StreamOutlet, StreamInlet, resolve_stream
 import mne
+from libs.parse import get_channels_from_xml_desc
 from libs.stats import fake_uvrms
 
 print("looking for an EEG stream...")
@@ -18,14 +19,7 @@ EEG_sample, timestamp = inlet.pull_chunk(max_samples=250)
 info = inlet.info()
 channel_count = info.channel_count()
 xml_desc = info.desc()
-sensor_names = []
-ch = xml_desc.child("channels").child("channel")
-while not ch.empty():
-    # Assuming that the label is stored in a child element named 'label'
-    label = ch.child_value("label")
-    if label:
-        sensor_names.append(label)
-    ch = ch.next_sibling("channel")
+sensor_names = get_channels_from_xml_desc(xml_desc)
 
 print(f"Found {channel_count} channels: {', '.join(sensor_names)}")
 
@@ -77,8 +71,9 @@ while t<t_n:
 
         ch_types = ['eeg'] * channel_count
         info = mne.create_info(ch_names=sensor_names, sfreq=250, ch_types=ch_types)
+        info.set_montage("standard_1020")
 
-        raw = mne.io.RawArray(np.asarray(EEG_sample).T / 1e6, info)
+        raw = mne.io.RawArray(np.asarray(EEG_sample).T, info)
 
         # TODO
         # Actually implement RMS
