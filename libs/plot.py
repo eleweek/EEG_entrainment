@@ -1,3 +1,5 @@
+import pygame
+
 from collections import namedtuple
 import matplotlib
 import matplotlib.pyplot as plt
@@ -62,3 +64,12 @@ def plot_psd(psd, title=None, average=True):
     add_red_line_with_value(fig, peak_alpha_freq, delta_db)
 
     return fig, namedtuple('PSDData', ['peak_alpha_freq', 'delta_db'])(peak_alpha_freq, delta_db)
+
+
+def plot_to_pygame(agg, fig):
+    canvas = agg.FigureCanvasAgg(fig)
+    canvas.draw()
+    renderer = canvas.get_renderer()
+    raw_data = renderer.tostring_rgb()
+    size = canvas.get_width_height()
+    return pygame.image.fromstring(raw_data, size, "RGB")

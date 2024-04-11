@@ -4,19 +4,13 @@ import pygame
 import matplotlib.pyplot as plt
 from libs.file_formats import load_openbci_txt
 from libs.filters import create_new_raw_with_brainflow_filters_applied
+from libs.plot import plot_to_pygame
 
 import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.backends.backend_agg as agg
 
-def plot_to_pygame(fig):
-    canvas = agg.FigureCanvasAgg(fig)
-    canvas.draw()
-    renderer = canvas.get_renderer()
-    raw_data = renderer.tostring_rgb()
-    size = canvas.get_width_height()
-    return pygame.image.fromstring(raw_data, size, "RGB")
 
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
