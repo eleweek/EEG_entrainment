@@ -18,7 +18,7 @@ import matplotlib.backends.backend_agg as agg
 streams = resolve_streams()
 print(streams)
 
-eeg_streams = [stream for stream in streams if stream.stype == 'EEG']
+eeg_streams = [stream for stream in streams if stream.stype.upper() == 'EEG']
 if not eeg_streams:
     raise ValueError('No EEG streams found')
 
