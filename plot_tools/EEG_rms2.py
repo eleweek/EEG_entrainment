@@ -1,4 +1,5 @@
 import time
+import argparse
 
 import numpy as np
 import mne
@@ -14,6 +15,15 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.backends.backend_agg as agg
+
+parser = argparse.ArgumentParser(
+                    prog='EEG_rms2',
+                    description='WIP, for now prints RMS values and the PSD plot')
+
+parser.add_argument('--convert-uv', action='store_true', help='Convert uV to V')
+args = parser.parse_args()
+
+scale_factor = 1e-6 if args.convert_uv else 1.0
 
 streams = resolve_streams()
 print(streams)
@@ -74,7 +84,7 @@ while True:
         all_data_array = np.array(all_data)
         print(f"All data shape: {all_data_array.shape}")
 
-        raw = mne.io.RawArray(all_data_array.T * 1e-6, mne.create_info(names, sampling_rate, ch_types='eeg'))
+        raw = mne.io.RawArray(all_data_array.T * scale_factor, mne.create_info(names, sampling_rate, ch_types='eeg'))
         raw.set_montage('standard_1020')
         filter_and_drop_dead_channels(raw, None)
 
