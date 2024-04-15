@@ -102,13 +102,14 @@ while True:
         psd = raw.compute_psd(fmin=1.0, fmax=45.0)
         fig, _ = plot_psd(psd, title="PSD", average=False)
 
-        # fig = raw.plot(duration=5, show=False, show_scrollbars=False, show_scalebars=False, block=False)
+        
 
         psd_plot_pygame_image = plot_to_pygame(agg, fig)
 
         screen.fill(wht)
         screen.blit(psd_plot_pygame_image, (LEFT_MARGIN, TOP_MARGIN))
 
+        fig = raw.plot(duration=5, show=False, show_scrollbars=False, show_scalebars=False, block=False)
         screen.blit(plot_to_pygame(agg, fig), (LEFT_MARGIN, TOP_MARGIN + psd_plot_pygame_image.get_height() + 20))
 
 
