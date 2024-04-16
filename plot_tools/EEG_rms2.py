@@ -89,6 +89,7 @@ while True:
 
         raw = mne.io.RawArray(all_data.T * scale_factor, mne.create_info(names, sampling_rate, ch_types='eeg'))
         filter_and_drop_dead_channels(raw, None)
+        # raw.pick(['O1', 'Oz', 'O2'])
 
         start_index = len(raw.times) - int(sampling_rate)
         last_second_data = raw.get_data(start=start_index)
@@ -102,7 +103,7 @@ while True:
         pygame.event.get()
 
         psd = raw.compute_psd(fmin=1.0, fmax=45.0)
-        fig, _ = plot_psd(psd, title="PSD", average=False)
+        fig, _ = plot_psd(psd, title="PSD", average=True, ylim=(-20, 30))
 
         
 
