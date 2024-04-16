@@ -48,7 +48,6 @@ print(f"Found {n_channels} channels", names)
 print("Sampling rate:", sampling_rate)
 print("Units:", stream_info.get_channel_units())
 
-all_data = []
 max_seconds = 20
 
 
@@ -67,25 +66,28 @@ wht = (255,255,255)
 TOP_MARGIN = 20
 LEFT_MARGIN = 20
 
+all_data = None
 while True:
     # Pull data from the LSL stream
-    data, timestamps = inlet.pull_chunk()
+    data, _ = inlet.pull_chunk()
 
-    all_data.extend(data)
-    print("All data", len(all_data))
-    all_data = all_data[-int(sampling_rate) * max_seconds:]
+    if all_data is None:
+        all_data = data.copy()
+    else:
+        all_data = np.concatenate((all_data, data), axis=0)
+    
+    if len(all_data) > int(sampling_rate) * max_seconds:
+        all_data = all_data[-int(sampling_rate) * max_seconds:]
+
     print("All data", len(all_data))
     print("Pulled data", len(data))
-    print("Timestamps", timestamps)
 
 
     if len(data) > 0:
         # Convert data to a NumPy array
-        all_data_array = np.array(all_data)
-        print(f"All data shape: {all_data_array.shape}")
+        print(f"All data shape: {all_data.shape}")
 
-        raw = mne.io.RawArray(all_data_array.T * scale_factor, mne.create_info(names, sampling_rate, ch_types='eeg'))
-        raw.set_montage('standard_1020')
+        raw = mne.io.RawArray(all_data.T * scale_factor, mne.create_info(names, sampling_rate, ch_types='eeg'))
         filter_and_drop_dead_channels(raw, None)
 
         start_index = len(raw.times) - int(sampling_rate)
