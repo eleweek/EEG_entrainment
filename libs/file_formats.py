@@ -25,7 +25,7 @@ def load_raw_xdf(file_path):
 
     for stream in streams:
         stream_type = stream['info']['type'][0]
-        if stream_type == 'EEG':
+        if stream_type.upper() == 'EEG':
             eeg_stream = stream
         elif stream_type == 'Markers':
             markers_stream = stream        
@@ -34,7 +34,7 @@ def load_raw_xdf(file_path):
         raise ValueError('No EEG stream found in the XDF file')
     
     channel_descs = eeg_stream['info']['desc'][0]['channels'][0]["channel"]
-    assert all(ch_desc['type'][0] == 'EEG' for ch_desc in channel_descs)
+    assert all(ch_desc['type'][0].upper() == 'EEG' for ch_desc in channel_descs)
 
     ch_names = [ch_desc["label"][0] for ch_desc in channel_descs]
     
