@@ -28,7 +28,7 @@ def add_red_line_with_value(fig, value, delta_db):
             ha='left', va='top', color='red', fontsize=8, transform=text_transform)
 
 
-def plot_psd(psd, title=None, average=True):
+def plot_psd(psd, title=None, average=True, ylim=None):
     # TODO: do our own custom mapping of electrodes to colors
     COLOR_VALUES = ["brown", "red", "orange", "magenta", "green", "blue", "purple", "black"]
 
@@ -42,6 +42,9 @@ def plot_psd(psd, title=None, average=True):
     
     if title is not None:
         main_ax.set_title(title)
+    
+    if ylim is not None:
+        main_ax.set_ylim(*ylim)
 
     if not average and len(axes) != 2:
         raise Exception(f'Expected 2 axes, got {len(axes)}')

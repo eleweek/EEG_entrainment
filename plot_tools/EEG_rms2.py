@@ -1,4 +1,5 @@
 import time
+import argparse
 
 import numpy as np
 import mne
@@ -14,6 +15,15 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.backends.backend_agg as agg
+
+parser = argparse.ArgumentParser(
+                    prog='EEG_rms2',
+                    description='WIP, for now prints RMS values and the PSD plot')
+
+parser.add_argument('--convert-uv', action='store_true', help='Convert uV to V')
+args = parser.parse_args()
+
+scale_factor = 1e-6 if args.convert_uv else 1.0
 
 streams = resolve_streams()
 print(streams)
@@ -38,7 +48,6 @@ print(f"Found {n_channels} channels", names)
 print("Sampling rate:", sampling_rate)
 print("Units:", stream_info.get_channel_units())
 
-all_data = []
 max_seconds = 20
 
 
@@ -57,26 +66,30 @@ wht = (255,255,255)
 TOP_MARGIN = 20
 LEFT_MARGIN = 20
 
+all_data = None
 while True:
     # Pull data from the LSL stream
-    data, timestamps = inlet.pull_chunk()
+    data, _ = inlet.pull_chunk()
 
-    all_data.extend(data)
-    print("All data", len(all_data))
-    all_data = all_data[-int(sampling_rate) * max_seconds:]
+    if all_data is None:
+        all_data = data.copy()
+    else:
+        all_data = np.concatenate((all_data, data), axis=0)
+    
+    if len(all_data) > int(sampling_rate) * max_seconds:
+        all_data = all_data[-int(sampling_rate) * max_seconds:]
+
     print("All data", len(all_data))
     print("Pulled data", len(data))
-    print("Timestamps", timestamps)
 
 
     if len(data) > 0:
         # Convert data to a NumPy array
-        all_data_array = np.array(all_data)
-        print(f"All data shape: {all_data_array.shape}")
+        print(f"All data shape: {all_data.shape}")
 
-        raw = mne.io.RawArray(all_data_array.T * 1e-6, mne.create_info(names, sampling_rate, ch_types='eeg'))
-        raw.set_montage('standard_1020')
+        raw = mne.io.RawArray(all_data.T * scale_factor, mne.create_info(names, sampling_rate, ch_types='eeg'))
         filter_and_drop_dead_channels(raw, None)
+        # raw.pick(['O1', 'Oz', 'O2'])
 
         start_index = len(raw.times) - int(sampling_rate)
         last_second_data = raw.get_data(start=start_index)
@@ -90,15 +103,16 @@ while True:
         pygame.event.get()
 
         psd = raw.compute_psd(fmin=1.0, fmax=45.0)
-        fig, _ = plot_psd(psd, title="PSD", average=False)
+        fig, _ = plot_psd(psd, title="PSD", average=True, ylim=(-20, 30))
 
-        # fig = raw.plot(duration=5, show=False, show_scrollbars=False, show_scalebars=False, block=False)
+        
 
         psd_plot_pygame_image = plot_to_pygame(agg, fig)
 
         screen.fill(wht)
         screen.blit(psd_plot_pygame_image, (LEFT_MARGIN, TOP_MARGIN))
 
+        fig = raw.plot(duration=5, show=False, show_scrollbars=False, show_scalebars=False, block=False)
         screen.blit(plot_to_pygame(agg, fig), (LEFT_MARGIN, TOP_MARGIN + psd_plot_pygame_image.get_height() + 20))
 
 
