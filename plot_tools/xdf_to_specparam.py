@@ -50,7 +50,7 @@ psd_values, psd_freqs = psd.get_data(return_freqs=True)
 fg = SpectralGroupModel()
 print(psd_freqs.shape, psd_values.shape)
 fg.report(psd_freqs, psd_values, [3, 45])
-#fg.plot()
+fg.plot()
 
 # Plot the topographies across different frequency bands
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
@@ -76,7 +76,7 @@ for ind, (label, band_def) in enumerate(bands):
 
     channel_index = np.argmax(band_power)
     # Extracted and plot the power spectrum model with the most band power
-    fg.get_model(np.argmax(channel_index)).plot(ax=axes[ind], add_legend=False)
+    fg.get_model(np.argmax(channel_index)).plot(ax=axes[ind], add_legend=False, linewidth=1.5)
 
     # Set some plot aesthetics & plot title
     axes[ind].yaxis.set_ticklabels([])
