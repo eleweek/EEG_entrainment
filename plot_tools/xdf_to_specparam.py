@@ -76,7 +76,7 @@ for ind, (label, band_def) in enumerate(bands):
 
     channel_index = np.argmax(band_power)
     # Extracted and plot the power spectrum model with the most band power
-    fg.get_model(np.argmax(channel_index)).plot(ax=axes[ind], add_legend=False, linewidth=1.5)
+    fg.get_model(np.argmax(channel_index)).plot(ax=axes[ind], add_legend=False, linewidth=1.0, data_kwargs={'color' : 'gray'}, model_kwargs={'color' : 'red', 'alpha' : 1.0})
 
     # Set some plot aesthetics & plot title
     axes[ind].yaxis.set_ticklabels([])
