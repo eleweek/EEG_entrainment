@@ -50,7 +50,6 @@ psd_values, psd_freqs = psd.get_data(return_freqs=True)
 fg = SpectralGroupModel()
 print(psd_freqs.shape, psd_values.shape)
 fg.report(psd_freqs, psd_values, [3, 45])
-fg.plot()
 
 # Plot the topographies across different frequency bands
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
@@ -76,11 +75,21 @@ for ind, (label, band_def) in enumerate(bands):
 
     channel_index = np.argmax(band_power)
     # Extracted and plot the power spectrum model with the most band power
-    fg.get_model(np.argmax(channel_index)).plot(ax=axes[ind], add_legend=False, linewidth=1.0, data_kwargs={'color' : 'gray'}, model_kwargs={'color' : 'red', 'alpha' : 1.0})
+    fg.get_model(ind=channel_index, regenerate=True).plot(ax=axes[ind], linewidth=1.0, data_kwargs={'color' : 'gray'}, model_kwargs={'color' : 'red', 'alpha' : 1.0})
 
     # Set some plot aesthetics & plot title
-    axes[ind].yaxis.set_ticklabels([])
     axes[ind].set_title('biggest ' + label + ' peak ' + raw.ch_names[channel_index], {'fontsize' : 16})
+
+min_y_lim = np.min([ax.get_ylim()[0] for ax in axes])
+max_y_lim = np.max([ax.get_ylim()[1] for ax in axes])
+
+for ax in axes:
+    ax.set_ylim(min_y_lim, max_y_lim)
+
+for ax in axes[1:]:
+    ax.set_yticklabels([])
+    ax.set_ylabel('')
+
 
 
 print("Before plt.show()")
