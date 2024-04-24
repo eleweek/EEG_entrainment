@@ -85,6 +85,7 @@ max_y_lim = np.max([ax.get_ylim()[1] for ax in axes])
 
 for ax in axes:
     ax.set_ylim(min_y_lim, max_y_lim)
+    ax.grid(False)
 
 for ax in axes[1:]:
     ax.set_yticklabels([])
