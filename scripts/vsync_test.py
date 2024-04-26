@@ -9,7 +9,7 @@ pygame.init()
 
 pygame.display.set_caption('Vsync test')
 vsync=0
-window_surface = pygame.display.set_mode((800, 600), flags=pygame.SCALED, vsync=vsync)
+window_surface = pygame.display.set_mode((800, 600), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=vsync)
 manager = pygame_gui.UIManager((800, 600))
 
 background = pygame.Surface((800, 600))
@@ -35,7 +35,7 @@ while is_running:
             else:
                 vsync = 1
             print("Vsync", vsync)
-            window_surface = pygame.display.set_mode((800, 600), flags=pygame.SCALED, vsync=vsync)
+            window_surface = pygame.display.set_mode((800, 600), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=vsync)
 
         manager.process_events(event)
 

@@ -8,7 +8,7 @@ SCREEN_HEIGHT = 600
 pygame.init()
 pygame.display.set_caption('Vsync test')
 vsync = 0
-display = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags=pygame.SCALED, vsync=vsync)
+display = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=vsync)
 
 background = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
 background.fill(pygame.Color(0, 0, 0))
@@ -30,7 +30,7 @@ while is_running:
                 vsync = 0
             else:
                 vsync = 1
-            window_surface = pygame.display.set_mode((800, 600), flags=pygame.SCALED, vsync=vsync)
+            window_surface = pygame.display.set_mode((800, 600), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=vsync)
 
 
     display.blit(background, (0, 0))
