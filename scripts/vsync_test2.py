@@ -20,7 +20,7 @@ clock = pygame.time.Clock()
 
 is_running = True
 while is_running:
-    time_delta = clock.tick(1000)/1000.0
+    time_delta = clock.tick() / 1000.0
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             is_running = False
@@ -38,4 +38,4 @@ while is_running:
     display.blit(text, (350, 280))
     
 
-    pygame.display.update()
+    pygame.display.flip()
