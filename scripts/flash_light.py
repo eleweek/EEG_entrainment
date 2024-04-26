@@ -1,5 +1,7 @@
 import pygame
 import time
+import numpy as np
+import matplotlib.pyplot as plt
 
 # Initialize Pygame
 pygame.init()
@@ -9,12 +11,21 @@ width, height = 400, 400
 screen = pygame.display.set_mode((width, height))
 pygame.display.set_caption("Flashing Square")
 
-frequency = 8
+monitor_Hz = 144
+
+frequency = 8.5
 
 white = (255, 255, 255)
 black = (0, 0, 0)
 
 screen.fill(black)
+
+t0 = time.perf_counter_ns()
+last_check = t0
+post_flip_wait = 0.51 * (1/monitor_Hz)
+
+frametime_log = np.zeros(1000)
+f_i = 0
 
 running = True
 while running:
@@ -22,16 +33,33 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
-    start_flash_time = time.time()
-    flash_duration = 1 / 30.0
+    
+    
 
     pygame.draw.rect(screen, white, (150, 150, 100, 100))
     pygame.display.flip()
-    time.sleep(flash_duration)
+    time_here = time.perf_counter_ns()
+    frametime_log[f_i] = time_here - last_check
+    last_check = time_here
+    f_i += 1
+    
+    time.sleep(post_flip_wait)
 
     pygame.draw.rect(screen, black, (150, 150, 100, 100))
     pygame.display.flip()
-    time.sleep(1.0 / frequency - time.time() + start_flash_time)
+    time_here = time.perf_counter_ns()
+    frametime_log[f_i] = time_here - last_check
+    last_check = time_here
+    f_i += 1
+    
+    time.sleep(post_flip_wait)
+
+    if f_i > 999:
+        running = False
+
+# Simple plot for Frametime
+plt.plot(frametime_log)
+plt.show()
 
 # Quit Pygame
 pygame.quit()

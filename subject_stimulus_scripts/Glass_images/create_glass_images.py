@@ -14,8 +14,9 @@ width = 500
 height = 500
 
 # Glass params
+# random.seed(42)
 circ_here = True
-initial_dot_density = 0.03
+initial_dot_density = 0.015
 dot_twin_frac = 1
 dot_offset_px = 6 # Somewhere around 4-8 pixels for 16 arc-min
 spiral_b = 10
@@ -72,7 +73,7 @@ for i in range(width):
 
                     if 0 < new_x < width:
                         if 0 < new_y < height:
-                            image[new_x, new_y] = highlight_color
+                            image[new_x, new_y] = glass_color
                             dot_red_count +=1
                     
 
@@ -83,10 +84,11 @@ for i in range(width):
 
 
                 
-summary_str = f"Found {dot_count} original dots and {dot_red_count} twins, {rotation} deg away"
-print(summary_str)                
+               
 
 # Display the image
 plt.imshow(image)
 plt.show()
 
+summary_str = f"Found {dot_count} original dots and {dot_red_count} twins, {rotation} deg away"
+print(summary_str) 
