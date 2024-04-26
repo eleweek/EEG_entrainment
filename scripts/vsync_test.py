@@ -1,4 +1,4 @@
-# Copied from: https://github.com/pygame/pygame/issues/3085
+# Adapted from: https://github.com/pygame/pygame/issues/3085
 
 import pygame
 import pygame_gui
@@ -16,15 +16,15 @@ background = pygame.Surface((800, 600))
 background.fill(pygame.Color(0, 0, 0))
 
 
-fps_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect((350, 280), (150, 30)),
-                                        text='0 FPS',
+fps_label = pygame_gui.elements.UILabel(relative_rect=pygame.Rect((350, 280), (210, 30)),
+                                        text='Vsync = 0, 0 FPS',
                                         manager=manager)
 
 clock = pygame.time.Clock()
 is_running = True
 
 while is_running:
-    time_delta = clock.tick()/1000.0
+    time_delta = clock.tick(1000)/1000.0
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             is_running = False
@@ -39,7 +39,7 @@ while is_running:
 
         manager.process_events(event)
 
-    fps_label.set_text(f"{clock.get_fps():.2f}" + " FPS")
+    fps_label.set_text(f"VSync = {1 if vsync else 0}, {clock.get_fps():.2f} FPS")
 
     manager.update(time_delta)
 
