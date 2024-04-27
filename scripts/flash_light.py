@@ -27,6 +27,8 @@ post_flip_wait = 0.51 * (1/monitor_Hz)
 frametime_log = np.zeros(1000)
 f_i = 0
 
+print("Frequency", frequency)
+
 running = True
 while running:
     for event in pygame.event.get():
@@ -38,7 +40,7 @@ while running:
             if event.key == pygame.K_RIGHT:
                 frequency += 0.25
 
-    print("Frequency", frequency)
+    
 
 
     

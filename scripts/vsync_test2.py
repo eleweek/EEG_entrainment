@@ -2,12 +2,12 @@
 
 import pygame
 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 720
 
 pygame.init()
 pygame.display.set_caption('Vsync test')
-vsync = 0
+vsync = 1
 display = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=vsync)
 
 background = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -30,12 +30,12 @@ while is_running:
                 vsync = 0
             else:
                 vsync = 1
-            window_surface = pygame.display.set_mode((800, 600), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=vsync)
+            window_surface = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=vsync)
 
 
     display.blit(background, (0, 0))
     text = font.render(f"VSync = {1 if vsync else 0}, {clock.get_fps():.2f} FPS", True, pygame.Color(255, 255, 255)) 
-    display.blit(text, (350, 280))
+    display.blit(text, (SCREEN_WIDTH/2, SCREEN_HEIGHT/2))
     
 
     pygame.display.flip()
