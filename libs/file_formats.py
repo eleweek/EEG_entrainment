@@ -55,3 +55,12 @@ def load_raw_xdf(file_path):
         raw.set_annotations(annotations)
 
     return raw
+
+
+def load_recording(file_path):
+    if file_path.endswith('.txt'):
+        return load_openbci_txt(file_path)
+    elif file_path.endswith('.xdf'):
+        return load_raw_xdf(file_path)
+    elif file_path.endswith('.vhdr'):
+        return mne.io.read_raw(file_path, preload=True)

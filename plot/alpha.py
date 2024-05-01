@@ -7,7 +7,7 @@ import mne
 from mne.time_frequency import tfr_multitaper, tfr_stockwell, tfr_morlet
 import matplotlib.pyplot as plt
 
-from libs.file_formats import load_raw_xdf
+from libs.file_formats import load_recording
 from libs.filters import filter_and_drop_dead_channels
 from libs.plot import plot_psd
 from libs.parse import parse_picks
@@ -21,7 +21,7 @@ parser.add_argument('--picks', type=str, default=None, help='Comma or space-sepa
 parser.add_argument('--separate-channels', action='store_true', help='Plot each channel separately')
 
 args = parser.parse_args()
-input_xdf_filename = args.input_xdf_filename
+input_filename = args.input_xdf_filename
 picks = parse_picks(args.picks)
 separate_channels = args.separate_channels
 
@@ -117,7 +117,7 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
             ax.set_title("Using S transform, width = {:0.1f}".format(width))
 
 
-raw = load_raw_xdf(input_xdf_filename)
+raw = load_recording(input_filename)
 filter_and_drop_dead_channels(raw, picks)
 
 psd = raw.compute_psd(fmin=1.0, fmax=45.0)

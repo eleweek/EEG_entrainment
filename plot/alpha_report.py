@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 
-from libs.file_formats import load_raw_xdf
+from libs.file_formats import load_recording
 from libs.filters import filter_and_drop_dead_channels
 from libs.plot import plot_psd
 from libs.parse import parse_picks
@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(
                     prog='xdf_to_alpha_hz_and_db_over_time',
                     description='Creates a report with the peak alpha frequency and delta peak over time, dumps PSD plots for each chunk',
 )
-parser.add_argument('input_xdf_filename', type=str, help='Path to the XDF file')
+parser.add_argument('input_filename', type=str, help='Path to the XDF file')
 parser.add_argument('output_report_filename', type=str, help='Path to the output HTML report file')
 
 parser.add_argument('--chunk_duration', type=float, default=90.0, help='Duration of each chunk in seconds')
@@ -29,7 +29,7 @@ parser.add_argument('--separate-channels', action='store_true', help='Plot each 
 
 args = parser.parse_args()
 
-input_xdf_filename = args.input_xdf_filename
+input_filename = args.input_filename
 output_report_filename = args.output_report_filename
 chunk_duration = args.chunk_duration
 chunk_shift = args.chunk_shift
@@ -55,7 +55,7 @@ def format_time(seconds):
 
 
 # Load the MNE Raw file
-raw = load_raw_xdf(input_xdf_filename)
+raw = load_recording(input_filename)
 filter_and_drop_dead_channels(raw, picks)
 
 
