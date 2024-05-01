@@ -60,7 +60,7 @@ pygame.display.set_caption('EEG Noise RMS Display')
 font = pygame.font.Font(None, 36)
 
 # colors
-gry = (128,128,128)
+black = (0, 0, 0)
 wht = (255,255,255)
 
 TOP_MARGIN = 20
@@ -89,12 +89,11 @@ while True:
 
         raw = mne.io.RawArray(all_data.T * scale_factor, mne.create_info(names, sampling_rate, ch_types='eeg'))
         filter_and_drop_dead_channels(raw, None)
-        # raw.pick(['O1', 'Oz', 'O2'])
 
-        start_index = len(raw.times) - int(sampling_rate)
-        last_second_data = raw.get_data(start=start_index)
-
-        uvrms = np.sqrt(np.mean(last_second_data ** 2, axis=1)) * 1e6
+        second_before_the_last_data = raw.get_data(start=len(raw.times) - int(sampling_rate) * 2, stop=len(raw.times) - int(sampling_rate))
+        # Calculate the RMS value for each channel, convert to uV
+        # Use the second before the last second of data because the last second might have filter ringing
+        uvrms = np.sqrt(np.mean(second_before_the_last_data ** 2, axis=1)) * 1e6
 
         print("uVRMS:", uvrms)
 
@@ -104,8 +103,6 @@ while True:
 
         psd = raw.compute_psd(fmin=1.0, fmax=45.0)
         fig, _ = plot_psd(psd, title="PSD", average=True, ylim=(-20, 30))
-
-        
 
         psd_plot_pygame_image = plot_to_pygame(agg, fig)
 
@@ -117,7 +114,7 @@ while True:
 
 
         trial_text = f"Most recent RMS: {','.join(str(int(d)) for d in uvrms)}"
-        text = font.render(trial_text, True, gry) 
+        text = font.render(trial_text, True, black) 
         screen.blit(text, text.get_rect(center=(screen_width/2, screen_height/2)))
 
         pygame.display.flip()
