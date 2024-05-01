@@ -41,7 +41,7 @@ def load_muse_csv(file_path):
     assert sfreq == 256, f'Unexpected sampling frequency: {sfreq}'
 
     info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=['eeg'] * len(ch_names), verbose=False)
-    raw = mne.io.RawArray(data / 1e6, info, verbose=False)
+    raw = mne.io.RawArray(data * 1e-6, info, verbose=False)
 
     return raw
 

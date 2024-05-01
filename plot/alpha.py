@@ -121,7 +121,13 @@ raw = load_recording(input_filename)
 filter_and_drop_dead_channels(raw, picks)
 
 psd = raw.compute_psd(fmin=1.0, fmax=45.0)
-plot_psd(psd, title="PSD of the whole recording, channels = " + " ".join(raw.ch_names), average=not separate_channels)
+
+duration_seconds = len(raw.get_data()[0]) / raw.info['sfreq']
+hours = int(duration_seconds // 3600)
+minutes = int((duration_seconds % 3600) // 60)
+seconds = int(duration_seconds % 60)
+
+plot_psd(psd, title=f"PSD of the whole recording ({hours:02d}:{minutes:02d}:{seconds:02d}), channels = " + " ".join(raw.ch_names), average=not separate_channels)
 
 plot_spectrogram(raw.copy(), single_best_plot=True, multitaper=False, morlet=False, stockwell=False)
 
