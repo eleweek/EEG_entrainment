@@ -57,7 +57,7 @@ screen_width, screen_height = 1000, 1000
 
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption('EEG Noise RMS Display')
-font = pygame.font.Font(None, 36)
+font = pygame.font.SysFont("monospace", 18)
 
 # colors
 black = (0, 0, 0)
@@ -113,9 +113,9 @@ while True:
         screen.blit(plot_to_pygame(agg, fig), (LEFT_MARGIN, TOP_MARGIN + psd_plot_pygame_image.get_height() + 20))
 
 
-        trial_text = f"Most recent RMS: {','.join(str(int(d)) for d in uvrms)}"
-        text = font.render(trial_text, True, black) 
-        screen.blit(text, text.get_rect(center=(screen_width/2, screen_height/2)))
+        rms_text = f"uvRMS = {int(min(uvrms)):2d}‥{int(max(uvrms)):<3d}  {' '.join(f"{int(d):2d}" for d in uvrms)}"
+        text = font.render(rms_text, True, black) 
+        screen.blit(text, (LEFT_MARGIN / 2, TOP_MARGIN / 2))
 
         pygame.display.flip()
     
