@@ -22,9 +22,11 @@ def plot_raw_eeg(raw, duration, start_offset=1.0, end_offset=1.0):
     ch_names = raw.ch_names
     sfreq = raw.info['sfreq']
 
-    # Define the time range to plot (first 10 seconds)
+    # Define the time range to plot
+    data_length_seconds = len(data[0]) / sfreq  # Total seconds of data available
+    effective_duration = min(data_length_seconds, duration)  # Effective duration to plot
     start_time = start_offset
-    end_time = (len(data[0]) / sfreq if duration is None else min(duration, len(data[0]) / sfreq)) - end_offset
+    end_time = effective_duration - end_offset
     start_sample = int(start_time * sfreq)
     end_sample = int(end_time * sfreq)
 
@@ -32,17 +34,17 @@ def plot_raw_eeg(raw, duration, start_offset=1.0, end_offset=1.0):
     n_channels = len(ch_names)
     fig, axes = plt.subplots(n_channels, 1, figsize=(8, n_channels * 0.75), sharex=True)
 
-    ch_indices = [ch_names.index(ch) for ch in ['O1', 'O2', 'Oz'] if ch in ch_names]
-
-    y_min = np.min(data[ch_indices, start_sample:end_sample])
-    y_max = np.max(data[ch_indices, start_sample:end_sample])
+    y_min = 50 * 1e-6
+    y_max = -50 * 1e-6
 
     # Plot each channel in its own subplot
-    time = np.arange(start_sample, end_sample) / sfreq
+    # Calculate time array to only span actual data duration but fit into the -duration to 0 scale
+    total_samples = end_sample - start_sample
+    time_offsets = np.linspace(-duration + start_offset, -duration + start_offset + (total_samples / sfreq), total_samples)
     for i, ax in enumerate(axes):
-        ax.plot(time, data[i, start_sample:end_sample], color='black', linewidth=0.25)
+        ax.plot(time_offsets, data[i, start_sample:end_sample], color='black', linewidth=0.25)
         ax.set_ylabel(ch_names[i], rotation=0, labelpad=5, ha='left')
-        ax.set_xlim(start_time, duration - start_offset - end_offset)
+        ax.set_xlim(-duration + start_offset, -end_offset)  # Fixed x-axis from -duration to 0
         ax.set_ylim(y_min, y_max)
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
@@ -57,7 +59,6 @@ def plot_raw_eeg(raw, duration, start_offset=1.0, end_offset=1.0):
     plt.tight_layout()
 
     return fig
-
 
 parser = argparse.ArgumentParser(
                     prog='EEG_rms2',
