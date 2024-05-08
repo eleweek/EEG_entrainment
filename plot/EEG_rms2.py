@@ -13,8 +13,51 @@ from libs.plot import plot_psd, plot_to_pygame
 
 import matplotlib
 matplotlib.use("Agg")
-
 import matplotlib.backends.backend_agg as agg
+import matplotlib.pyplot as plt
+
+def plot_raw_eeg(raw, duration, start_offset=1.0, end_offset=1.0):
+    # Get the data, channel names, and sampling frequency
+    data = raw.get_data()
+    ch_names = raw.ch_names
+    sfreq = raw.info['sfreq']
+
+    # Define the time range to plot (first 10 seconds)
+    start_time = start_offset
+    end_time = (len(data[0]) / sfreq if duration is None else min(duration, len(data[0]) / sfreq)) - end_offset
+    start_sample = int(start_time * sfreq)
+    end_sample = int(end_time * sfreq)
+
+    # Create a figure and subplots
+    n_channels = len(ch_names)
+    fig, axes = plt.subplots(n_channels, 1, figsize=(8, n_channels * 0.75), sharex=True)
+
+    ch_indices = [ch_names.index(ch) for ch in ['O1', 'O2', 'Oz'] if ch in ch_names]
+
+    y_min = np.min(data[ch_indices, start_sample:end_sample])
+    y_max = np.max(data[ch_indices, start_sample:end_sample])
+
+    # Plot each channel in its own subplot
+    time = np.arange(start_sample, end_sample) / sfreq
+    for i, ax in enumerate(axes):
+        ax.plot(time, data[i, start_sample:end_sample], color='black', linewidth=0.25)
+        ax.set_ylabel(ch_names[i], rotation=0, labelpad=5, ha='left')
+        ax.set_xlim(start_time, duration - start_offset - end_offset)
+        ax.set_ylim(y_min, y_max)
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.tick_params(left=False)
+        ax.set_yticks([])
+
+    # Set the x-label for the last subplot
+    axes[-1].set_xlabel('Time (s)')
+
+    # Adjust the spacing between subplots
+    plt.tight_layout()
+
+    return fig
+
 
 parser = argparse.ArgumentParser(
                     prog='EEG_rms2',
@@ -109,8 +152,10 @@ while True:
         screen.fill(wht)
         screen.blit(psd_plot_pygame_image, (LEFT_MARGIN, TOP_MARGIN))
 
-        fig = raw.plot(duration=5, show=False, show_scrollbars=False, show_scalebars=False, block=False)
-        screen.blit(plot_to_pygame(agg, fig), (LEFT_MARGIN, TOP_MARGIN + psd_plot_pygame_image.get_height() + 20))
+        if len(raw.times) > 3 * sampling_rate:
+            # fig = raw.plot(duration=5, show=False, show_scrollbars=False, show_scalebars=False, block=False)
+            fig = plot_raw_eeg(raw, max_seconds, start_offset=1.5, end_offset=1.5)
+            screen.blit(plot_to_pygame(agg, fig), (LEFT_MARGIN, TOP_MARGIN + psd_plot_pygame_image.get_height() + 20))
 
 
         rms_text = f"uvRMS = {int(min(uvrms)):2d}‥{int(max(uvrms)):<3d}  {' '.join(f"{int(d):2d}" for d in uvrms)}"
