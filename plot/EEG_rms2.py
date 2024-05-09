@@ -38,9 +38,17 @@ def plot_raw_eeg(raw, duration, start_offset=1.0, end_offset=1.0):
     y_max = -50 * 1e-6
 
     # Plot each channel in its own subplot
-    # Calculate time array to only span actual data duration but fit into the -duration to 0 scale
+    # Calculate time array to only span actual data duration but ensure it's right-aligned by ending at 0
     total_samples = end_sample - start_sample
-    time_offsets = np.linspace(-duration + start_offset, -duration + start_offset + (total_samples / sfreq), total_samples)
+    if duration - effective_duration > 0:
+        # Shift start point further left if the effective duration is less than the full duration
+        left_bound = -duration + (duration - effective_duration) + start_offset
+    else:
+        left_bound = -duration + start_offset
+
+    right_bound = -end_offset  # Ensuring the latest data aligns with time 0
+    time_offsets = np.linspace(left_bound, right_bound, total_samples)
+
     for i, ax in enumerate(axes):
         ax.plot(time_offsets, data[i, start_sample:end_sample], color='black', linewidth=0.25)
         ax.set_ylabel(ch_names[i], rotation=0, labelpad=5, ha='left')
