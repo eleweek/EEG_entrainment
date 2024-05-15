@@ -143,9 +143,10 @@ while True:
         filter_and_drop_dead_channels(raw, None)
 
         second_before_the_last_data = raw.get_data(start=len(raw.times) - int(sampling_rate) * 2, stop=len(raw.times) - int(sampling_rate))
+
         # Calculate the RMS value for each channel, convert to uV
         # Use the second before the last second of data because the last second might have filter ringing
-        uvrms = np.sqrt(np.mean(second_before_the_last_data ** 2, axis=1)) * 1e6
+        uvrms = np.sqrt(np.mean(second_before_the_last_data ** 2, axis=1)) * 1e6 if len(second_before_the_last_data) > 0 else np.zeros(n_channels)
 
         print("uVRMS:", uvrms)
 
