@@ -32,7 +32,7 @@ def plot_raw_eeg(raw, duration, start_offset=1.0, end_offset=1.0):
 
     # Create a figure and subplots
     n_channels = len(ch_names)
-    fig, axes = plt.subplots(n_channels, 1, figsize=(8, n_channels * 0.75), sharex=True)
+    fig, axes = plt.subplots(n_channels, 1, figsize=(8, n_channels * 0.75), sharex=True, dpi=200)
 
     y_min = 50 * 1e-6
     y_max = -50 * 1e-6
@@ -111,6 +111,7 @@ print("Units:", stream_info.get_channel_units())
 max_seconds = 20
 
 window = pyglet.window.Window(1000, 1000)
+print('Pixel ratio', window.get_pixel_ratio())
 pyglet.gl.glClearColor(1, 1, 1, 1)
 
 label = pyglet.text.Label('', font_name='monospace', font_size=18, x=10, y=10, color=(0, 0, 0, 255))
@@ -123,11 +124,16 @@ all_data = None
 @window.event
 def on_draw():
     window.clear()
-    label.draw()
+    pixel_ratio = window.get_pixel_ratio()
+    label.x = 10 * pixel_ratio
+    label.y = 10 * pixel_ratio
     if 'psd_plot_pyglet_image' in globals():
         psd_plot_pyglet_image.blit(LEFT_MARGIN, window.height - TOP_MARGIN - psd_plot_pyglet_image.height)
     if 'raw_plot_pyglet_image' in globals():
-        raw_plot_pyglet_image.blit(LEFT_MARGIN, window.height - TOP_MARGIN - psd_plot_pyglet_image.height - raw_plot_pyglet_image.height - 20)
+        raw_width = raw_plot_pyglet_image.width // pixel_ratio
+        raw_height = raw_plot_pyglet_image.height // pixel_ratio
+        raw_plot_pyglet_image.blit(LEFT_MARGIN * pixel_ratio, window.height - TOP_MARGIN * pixel_ratio - psd_plot_pyglet_image.height - raw_height - 20 * pixel_ratio, width=raw_width, height=raw_height)
+
 
 def update(dt):
     global all_data, psd_plot_pyglet_image, raw_plot_pyglet_image, label
