@@ -140,7 +140,8 @@ while True:
         print(f"All data shape: {all_data.shape}")
 
         raw = mne.io.RawArray(all_data.T * scale_factor, mne.create_info(names, sampling_rate, ch_types='eeg'))
-        filter_and_drop_dead_channels(raw, None)
+        # filter_and_drop_dead_channels(raw, None)
+        raw.pick_channels(["Fp1", "Fp2", "O1", "Oz", "O2"])
 
         second_before_the_last_data = raw.get_data(start=len(raw.times) - int(sampling_rate) * 2, stop=len(raw.times) - int(sampling_rate))
 
@@ -154,7 +155,7 @@ while True:
         # Update screen
         pygame.event.get()
 
-        psd = raw.compute_psd(fmin=1.0, fmax=45.0, picks=["O1", "Oz", "O2"])
+        psd = raw.compute_psd(fmin=1.0, fmax=45.0)
         fig, _ = plot_psd(psd, title="PSD", average=False, ylim=(-20, 30))
 
         psd_plot_pygame_image = plot_to_pygame(agg, fig)
