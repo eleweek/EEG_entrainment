@@ -154,8 +154,8 @@ while True:
         # Update screen
         pygame.event.get()
 
-        psd = raw.compute_psd(fmin=1.0, fmax=45.0)
-        fig, _ = plot_psd(psd, title="PSD", average=True, ylim=(-20, 30))
+        psd = raw.compute_psd(fmin=1.0, fmax=45.0, picks=["O1", "Oz", "O2"])
+        fig, _ = plot_psd(psd, title="PSD", average=False, ylim=(-20, 30))
 
         psd_plot_pygame_image = plot_to_pygame(agg, fig)
 
