@@ -1,3 +1,5 @@
+import sys
+
 import pygame
 import time
 
@@ -9,7 +11,7 @@ width, height = 400, 400
 screen = pygame.display.set_mode((width, height), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=1)
 pygame.display.set_caption("Flashing Square")
 
-frequency = 8
+frequency = float(sys.argv[1])
 
 white = (255, 255, 255)
 black = (0, 0, 0)
