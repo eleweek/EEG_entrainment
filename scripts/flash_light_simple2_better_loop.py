@@ -4,9 +4,12 @@ import sys
 from math import floor
 
 frequency = float(sys.argv[1])
+max_frequency = float(sys.argv[2])
 
 WIDTH = 1920
 HEIGHT = 1080
+
+SQUARE_SIDE = 600
 
 # Initialize pygame
 pygame.init()
@@ -28,13 +31,13 @@ def find_target_fps(frequency, min_frequency=48, max_frequency=165):
     return result
 
 
-target_fps = find_target_fps(frequency, max_frequency=60)
+target_fps = find_target_fps(frequency, max_frequency=max_frequency)
 interval = 1.0 / target_fps
 off_frames_per_each_on = int((target_fps - frequency) / frequency)
 
 
 # Define the white rectangle
-rect_width, rect_height = 300, 300
+rect_width, rect_height = SQUARE_SIDE, SQUARE_SIDE
 rect_x = (WIDTH - rect_width) // 2
 rect_y = (HEIGHT - rect_height) // 2
 
