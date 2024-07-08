@@ -6,11 +6,15 @@ from brainflow.data_filter import DataFilter, FilterTypes, NoiseTypes
 import numpy as np
 
 def filter_and_drop_dead_channels(raw, picks):
+    to_drop = []
+
     data = raw.get_data()
     for channel in range(raw.info['nchan']):
         if np.all(data[channel] == data[channel][0]):
-            print(f"Channel {channel} is dead, dropping it")
-            raw.drop_channels([raw.ch_names[channel]])
+            to_drop.append(raw.ch_names[channel])
+
+    raw.drop_channels(to_drop)
+        
     raw.filter(l_freq=1.0, h_freq=45.0, verbose=False)
     raw.notch_filter(50, notch_widths=4, verbose=False)
 
