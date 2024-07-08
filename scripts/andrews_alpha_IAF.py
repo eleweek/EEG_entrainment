@@ -26,14 +26,20 @@ for i in range(streamcount):
         EEG_mask[i] = 1
     print(f'{i} - {streams[i]["info"]["name"][0]} - isEEG-{EEG_mask[i]}')
 
-EEG_streamcount = sum(EEG_mask)
+EEG_streamcount = int(sum(EEG_mask))
 
 EEG_to_analyze = EEG_mask
 
-def get_locs(loc_type):
+def get_locs(loc_type, n_elec):
     electrode_names = False
     folder_here = getcwd()
-    loc_folder = folder_here[0:-8] + sep +'hardware' + sep + 'EEG_electrode_locs' + sep
+
+    if folder_here.endswith("scripts"):
+        loc_folder = folder_here[0:-8] + sep +'hardware' + sep + 'EEG_electrode_locs' + sep
+    else:
+        loc_folder = folder_here + sep +'hardware' + sep + 'EEG_electrode_locs' + sep
+
+
     if loc_type.lower() == 'biosemi':
         
         loc_df = read_csv(loc_folder+'Biosemi_32.csv')
@@ -44,6 +50,12 @@ def get_locs(loc_type):
             electrode_names.append(i[0])  # make simple single list of str
 
     
+    if electrode_names == False:
+        electrode_names = []
+        for i in range(n_elec):
+            i_str = f"i"
+            electrode_names.append(i_str)
+        
     return electrode_names
 
 
@@ -52,12 +64,15 @@ def get_locs(loc_type):
 
 
 # Loop thru EEG sources
-for EEG_stream in EEG_streamcount:
+for EEG_stream in range(EEG_streamcount):
     stream_index = np.where(EEG_to_analyze == 1)[0][0]
     EEG_to_analyze[stream_index] = 0
 
     data = streams[stream_index]["time_series"].T
     n_elec = data.shape[0]
+
+    type_tag = streams[stream_index]['info']['name'][0]
+    type_tag = type_tag.lower()
 
     if n_elec > 31:
         n_elec = 31
@@ -66,10 +81,11 @@ for EEG_stream in EEG_streamcount:
     srate = streams[stream_index]["info"]["nominal_srate"][0]
 
     loc_type = streams[stream_index]["info"]["name"][0]
-    electrode_names = get_locs(loc_type)
+    electrode_names = get_locs(loc_type,n_elec)
+
 
     # Sanity check
-    rough_inferred_time_min = round(data.shape[1] / int(srate) / 60)
+    rough_inferred_time_min = round(data.shape[1] / float(srate) / 60)
     debug_str = f"Here, we have {streams[stream_index]['info']['name'][0]} data with {data.shape[0]+1} elecs and {data.shape[1]+1} timepoints. At this sample rate of {srate}, that is around {rough_inferred_time_min} minutes"
     if debug:    
         print(debug_str)
@@ -77,7 +93,24 @@ for EEG_stream in EEG_streamcount:
     # Make the MNE data
     info = mne.create_info(electrode_names, srate, "eeg")
 
-    #raw = mne.io.RawArray(data,info)
+    raw = mne.io.RawArray(data,info)
+
+    # Process Step 1 - re-reference
+    if type_tag in "biosemi,brainvision":
+        raw.set_eeg_reference(ref_channels=["Cz"])
+    
+    # Process Step 2 - filter
+    low_freq_filter = 0.5
+    high_freq_filter = 45
+    raw_bandpassed = raw.copy().filter(l_freq=low_freq_filter, h_freq=high_freq_filter)
+
+    # Plot
+    raw.plot()
+
+
+
+
+
 
 
 
