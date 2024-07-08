@@ -8,7 +8,7 @@ import pygame
 from mne_lsl.lsl import resolve_streams, StreamInlet
 
 from libs.filters import filter_and_drop_dead_channels
-from libs.parse import get_channels_from_xml_desc
+from libs.parse import get_channels_from_xml_desc, parse_picks
 from libs.plot import plot_psd, plot_to_pygame
 
 import matplotlib
@@ -73,7 +73,9 @@ parser = argparse.ArgumentParser(
                     description='WIP, for now prints RMS values and the PSD plot')
 
 parser.add_argument('--convert-uv', action='store_true', help='Convert uV to V')
+parser.add_argument('--picks', type=str, default=None, help='Comma or space-separated list of channels to use')
 args = parser.parse_args()
+picks = parse_picks(args.picks)
 
 scale_factor = 1e-6 if args.convert_uv else 1.0
 
@@ -141,7 +143,8 @@ while True:
 
         raw = mne.io.RawArray(all_data.T * scale_factor, mne.create_info(names, sampling_rate, ch_types='eeg'))
         # filter_and_drop_dead_channels(raw, None)
-        raw.pick_channels(["Fp1", "Fp2", "O1", "Oz", "O2"])
+        if picks:
+            raw.pick_channels(picks)
 
         second_before_the_last_data = raw.get_data(start=len(raw.times) - int(sampling_rate) * 2, stop=len(raw.times) - int(sampling_rate))
 
