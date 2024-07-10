@@ -6,6 +6,7 @@ import numpy as np
 import mne
 import pyxdf
 
+import matplotlib.pyplot as plt
 from pandas import read_csv
 from os import getcwd, sep
 
@@ -106,6 +107,34 @@ for EEG_stream in range(EEG_streamcount):
 
     # Plot
     raw.plot()
+    plt.show()
+
+    # Convert continuous 'raw' into segmented Epoched EEG
+    # Fake events to anchor epochs on
+    fake_events = mne.make_fixed_length_events(raw_bandpassed, id=1, start=0, stop=None, duration=5.0)
+    epochs = mne.Epochs(raw,fake_events,tmin=0,tmax=5,baseline=(0, 0))
+
+
+    # Power Spectra
+    from mne.time_frequency import morlet, fwhm, tfr_multitaper
+    sfreq = float(srate)
+    n_cycles = 7.0
+
+    freqs_to_check = np.arange(2, 50.5, 0.5)
+
+    #W = morlet(sfreq, freqs_to_check, n_cycles)
+    
+    #P_tfr = epochs.compute_tfr(method='multitaper', freqs=freqs_to_check, n_cycles=7,time_bandwidth=4.0, return_itc=False,average=True)
+    pick_no_Cz = np.arange(0,30)
+    P_psd = epochs.compute_psd(method='multitaper', fmin=freqs_to_check[0], fmax=freqs_to_check[-1],picks=pick_no_Cz)
+    P_psd.plot()
+
+    
+
+
+
+
+
 
 
 
