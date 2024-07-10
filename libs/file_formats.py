@@ -110,3 +110,5 @@ def load_recording(file_path):
         return load_raw_xdf(file_path)
     elif file_path.endswith('.vhdr'):
         return mne.io.read_raw(file_path, preload=True)
+
+    return mne.io.read_raw(file_path, preload=True)
