@@ -34,16 +34,32 @@ def sliding_window_iaf(raw, window_size=5, step_size=1):
         iaf = get_peak_alpha_freq(window_psd)
         iaf_estimates.append(iaf)
     
-    return iaf_estimates
+    return np.array(iaf_estimates)
 
-def plot_iaf_histogram(iaf_estimates):
-    fig, ax = plt.subplots(figsize=(10, 5))
+def plot_iaf_histogram(iaf_estimates, freq_resolution):
+    fig, ax = plt.subplots(figsize=(12, 6))
     
-    ax.hist(iaf_estimates, bins=50, edgecolor='black')
+    # Round IAF estimates to the nearest frequency bin
+    rounded_iaf = np.round(iaf_estimates / freq_resolution) * freq_resolution
+    
+    # Count occurrences of each unique IAF estimate
+    unique_iafs, counts = np.unique(rounded_iaf, return_counts=True)
+    print(unique_iafs, counts)
+    
+    # Plot the bar chart
+    ax.bar(unique_iafs, counts, width=freq_resolution*0.9, align='center', edgecolor='black')
+    
     ax.set_title('Histogram of IAF Estimates')
     ax.set_xlabel('Frequency (Hz)')
     ax.set_ylabel('Count')
-
+    
+    # Set x-axis ticks to show every 0.5 Hz
+    ax.set_xticks(np.arange(np.min(unique_iafs), np.max(unique_iafs) + 0.5, 0.5))
+    ax.set_xticklabels([f'{x:.1f}' for x in ax.get_xticks()])
+    
+    # Rotate x-axis labels for better readability
+    plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    
     plt.tight_layout()
     return fig
 
@@ -154,7 +170,7 @@ fig_psd, psd_data = plot_psd(psd, title=title, average=not separate_channels)
 iaf_estimates = sliding_window_iaf(raw, window_size=5, step_size=1)
 
 # Plot IAF histogram
-fig_iaf_hist = plot_iaf_histogram(iaf_estimates)
+fig_iaf_hist = plot_iaf_histogram(iaf_estimates, freq_resolution=psd.freqs[1] - psd.freqs[0])
 
 # Plot spectrogram
 fig_spectrogram = plot_spectrogram(raw.copy(), single_best_plot=True, multitaper=False, morlet=False, stockwell=False)
