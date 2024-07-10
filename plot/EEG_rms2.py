@@ -142,7 +142,7 @@ while True:
         print(f"All data shape: {all_data.shape}")
 
         raw = mne.io.RawArray(all_data.T * scale_factor, mne.create_info(names, sampling_rate, ch_types='eeg'))
-        # filter_and_drop_dead_channels(raw, None)
+        filter_and_drop_dead_channels(raw, None)
         if picks:
             raw.pick_channels(picks)
 
