@@ -4,12 +4,17 @@ import numpy as np
 import mne
 from mne.time_frequency import tfr_multitaper, tfr_stockwell, tfr_morlet
 import matplotlib.pyplot as plt
+import time
 
 from libs.file_formats import load_recording
 from libs.filters import filter_and_drop_dead_channels
 from libs.plot import plot_psd
 from libs.parse import parse_picks
 from libs.psd import get_peak_alpha_freq
+
+from specparam import SpectralModel, SpectralGroupModel
+from specparam.bands import Bands
+from specparam.analysis import get_band_peak_group
 
 parser = argparse.ArgumentParser(
                     prog='alpha_from_xdf',
@@ -24,44 +29,59 @@ input_filename = args.input_xdf_filename
 picks = parse_picks(args.picks)
 separate_channels = args.separate_channels
 
-def sliding_window_iaf(raw, window_size=5, step_size=1):
+# Define frequency bands of interest
+bands = Bands({'theta': [3, 7],
+               'alpha': [7, 14],
+               'beta': [15, 30]})
+
+def iaf_original(psd):
+    return get_peak_alpha_freq(psd)
+
+def iaf_specparam(psd):
+    psd_values, freqs = psd.get_data(return_freqs=True)
+
+    fg = SpectralGroupModel(max_n_peaks=6)
+    fg.fit(freqs, psd_values, [3, 45])
+    alpha_peaks = get_band_peak_group(fg, bands['alpha'])
+    res = None
+    if alpha_peaks.size > 0:
+        res = alpha_peaks[np.argmax(alpha_peaks[:, 1]), 0]  # Get frequency of highest power peak
+
+    if not np.isnan(res):
+        return res
+    
+    return None
+
+
+def sliding_window_iaf(raw, iaf_method, window_size=5, step_size=1):
     iaf_estimates = []
     
     for start in range(0, len(raw.times) - int(window_size * raw.info['sfreq']), int(step_size * raw.info['sfreq'])):
+        t0 = time.perf_counter()
+
         end = start + int(window_size * raw.info['sfreq'])
         window_raw = raw.copy().crop(tmin=raw.times[start], tmax=raw.times[end])
         window_psd = window_raw.compute_psd(fmin=1.0, fmax=45.0)
-        iaf = get_peak_alpha_freq(window_psd)
-        iaf_estimates.append(iaf)
+        
+        iaf = iaf_method(window_psd)
+        print("IAF estimation took", time.perf_counter() - t0, "seconds")
+
+        if iaf is not None:
+            iaf_estimates.append(iaf)
     
     return np.array(iaf_estimates)
 
-def plot_iaf_histogram(iaf_estimates, freq_resolution):
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    # Round IAF estimates to the nearest frequency bin
+
+def plot_iaf_histogram(ax, iaf_estimates, freq_resolution, color, label):
     rounded_iaf = np.round(iaf_estimates / freq_resolution) * freq_resolution
-    
-    # Count occurrences of each unique IAF estimate
     unique_iafs, counts = np.unique(rounded_iaf, return_counts=True)
-    print(unique_iafs, counts)
     
-    # Plot the bar chart
-    ax.bar(unique_iafs, counts, width=freq_resolution*0.9, align='center', edgecolor='black')
-    
-    ax.set_title('Histogram of IAF Estimates')
+    ax.bar(unique_iafs, counts, width=freq_resolution*0.9, align='center', edgecolor='black', color=color, alpha=0.7, label=label)
     ax.set_xlabel('Frequency (Hz)')
     ax.set_ylabel('Count')
-    
-    # Set x-axis ticks to show every 0.5 Hz
     ax.set_xticks(np.arange(np.min(unique_iafs), np.max(unique_iafs) + 0.5, 0.5))
     ax.set_xticklabels([f'{x:.1f}' for x in ax.get_xticks()])
-    
-    # Rotate x-axis labels for better readability
     plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-    
-    plt.tight_layout()
-    return fig
 
 def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, stockwell=False):
     BASELINE = (0.0, 0.1)
@@ -166,11 +186,24 @@ seconds = int(duration_seconds % 60)
 title = f"PSD of the whole recording ({hours:02d}:{minutes:02d}:{seconds:02d}), channels = " + " ".join(raw.ch_names)
 fig_psd, psd_data = plot_psd(psd, title=title, average=not separate_channels)
 
-# Perform sliding window IAF estimation
-iaf_estimates = sliding_window_iaf(raw, window_size=5, step_size=1)
+# Perform sliding window IAF estimation using both methods
+iaf_estimates_original = sliding_window_iaf(raw, iaf_original, window_size=5, step_size=1)
+iaf_estimates_specparam = sliding_window_iaf(raw, iaf_specparam, window_size=5, step_size=1)
+print("Specparam method IAF estimates:", iaf_estimates_specparam)
 
-# Plot IAF histogram
-fig_iaf_hist = plot_iaf_histogram(iaf_estimates, freq_resolution=psd.freqs[1] - psd.freqs[0])
+# Plot IAF histograms
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12), sharex=True)
+fig.suptitle('Histogram of IAF Estimates')
+
+plot_iaf_histogram(ax1, iaf_estimates_original, freq_resolution=psd.freqs[1] - psd.freqs[0], color='blue', label='Original Method')
+ax1.set_title('Original Method')
+ax1.legend()
+
+plot_iaf_histogram(ax2, iaf_estimates_specparam, freq_resolution=psd.freqs[1] - psd.freqs[0], color='red', label='Specparam Method')
+ax2.set_title('Specparam Method')
+ax2.legend()
+
+plt.tight_layout()
 
 # Plot spectrogram
 fig_spectrogram = plot_spectrogram(raw.copy(), single_best_plot=True, multitaper=False, morlet=False, stockwell=False)
