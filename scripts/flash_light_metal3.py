@@ -1,5 +1,5 @@
 import objc
-from Cocoa import NSApplication, NSApp, NSWindow, NSMakeRect, NSObject
+from Cocoa import NSApplication, NSApp, NSWindow, NSMakeRect, NSObject, NSScreen
 from Quartz import CoreGraphics, CGDisplayCopyAllDisplayModes, CGDisplayCopyDisplayMode, CGDisplayModeGetRefreshRate
 import Metal
 import MetalKit
@@ -35,11 +35,14 @@ class MetalView(NSView, protocols=[MTKViewDelegate]):
 
         return self
 
-    def get_display_refresh_rate(self):
-        main_display = CoreGraphics.CGMainDisplayID()
-        current_mode = CGDisplayCopyDisplayMode(main_display)
-        refresh_rate = CGDisplayModeGetRefreshRate(current_mode)
-        return refresh_rate
+    def get_all_display_refresh_rates(self):
+        refresh_rates = []
+        for screen in NSScreen.screens():
+            display_id = screen.deviceDescription()['NSScreenNumber']
+            current_mode = CGDisplayCopyDisplayMode(display_id)
+            refresh_rate = CGDisplayModeGetRefreshRate(current_mode)
+            refresh_rates.append((display_id, refresh_rate))
+        return refresh_rates
 
     def drawInMTKView_(self, view):
         current_time = time.time()
@@ -53,22 +56,18 @@ class MetalView(NSView, protocols=[MTKViewDelegate]):
         else:
             fps_60 = 0.0
 
-        # Calculate FPS for the last 300 frames
         if len(self.frame_times) > 300:
             fps_300 = 300 / (self.frame_times[-1] - self.frame_times[-301])
             self.frame_times.pop(0)
         else:
-            fps_60 = fps_300 = 0.0
+            fps_300 = 0.0
 
-        if current_time - self.last_refresh_check >= self.refresh_check_interval:
-            t0 = time.perf_counter()
-            self.refresh_rate = self.get_display_refresh_rate()
-            self.last_refresh_check = current_time
-            print(f"Refresh rate updated: {self.refresh_rate} Hz, took {time.perf_counter() - t0:.6f} seconds")
+        refresh_rates = self.get_all_display_refresh_rates()
 
-        print(f"Frame: {self.frame_count}, Time: {current_time:.2f}, "
-              f"FPS (60): {fps_60:.2f}, FPS (300): {fps_300:.2f}, "
-              f"Refresh Rate: {self.refresh_rate:.2f} Hz")
+        print(f"FPS: {fps_60:.2f} {fps_300:.2f} flash = {int(self.flash_on)} "
+              f"Frame: {self.frame_count}, Time: {current_time:.2f}")
+        print(f"Current display refresh rate: {', '.join(str(r[1]) for r in refresh_rates)}")
+        print()
 
         drawable = self.metal_layer.currentDrawable()
         render_pass_descriptor = self.metal_layer.currentRenderPassDescriptor()
@@ -105,9 +104,8 @@ class AppDelegate(NSObject):
         self.view = MetalView.alloc().initWithFrame_(NSMakeRect(0, 0, 800, 600))
         self.window.setContentView_(self.view)
 
-        initial_refresh_rate = self.view.get_display_refresh_rate()
-        print(f"Initial display refresh rate: {initial_refresh_rate} Hz")
-
+        initial_refresh_rates = self.view.get_all_display_refresh_rates()
+        print(f"Initial display refresh rates: {initial_refresh_rates}")
 
         self.window.makeKeyAndOrderFront_(None)
         self.window.display()
