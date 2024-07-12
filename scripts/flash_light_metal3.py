@@ -1,10 +1,14 @@
 import objc
-from Cocoa import NSApplication, NSApp, NSWindow, NSWindowStyleMask, NSMakeRect, NSView
+from Cocoa import NSApplication, NSApp, NSWindow, NSMakeRect, NSObject
 from Quartz import CoreGraphics
 import Metal
 import MetalKit
+from AppKit import NSWindowStyleMaskTitled, NSWindowStyleMaskClosable, NSWindowStyleMaskResizable, NSView
 
-class MetalView(NSView, protocols=[Metal.MTKViewDelegate]):
+# Dynamically access the MTKViewDelegate protocol
+MTKViewDelegate = objc.protocolNamed('MTKViewDelegate')
+
+class MetalView(NSView, protocols=[MTKViewDelegate]):
     def initWithFrame_(self, frame):
         self = objc.super(MetalView, self).initWithFrame_(frame)
         if self is None:
@@ -12,11 +16,10 @@ class MetalView(NSView, protocols=[Metal.MTKViewDelegate]):
 
         self.device = Metal.MTLCreateSystemDefaultDevice()
         self.metal_layer = MetalKit.MTKView.alloc().initWithFrame_device_(frame, self.device)
-        self.metal_layer.delegate = self
-        self.metal_layer.enableSetNeedsDisplay = True
-        self.metal_layer.clearColor = Metal.MTLClearColorMake(0.0, 0.0, 0.0, 1.0)
-        self.metal_layer.colorPixelFormat = Metal.MTLPixelFormatBGRA8Unorm
-        self.metal_layer.framebufferOnly = False
+        self.metal_layer.setDelegate_(self)
+        self.metal_layer.setColorPixelFormat_(Metal.MTLPixelFormatBGRA8Unorm)
+        self.metal_layer.setFramebufferOnly_(False)
+        self.metal_layer.setPaused_(False)
         self.addSubview_(self.metal_layer)
         
         self.command_queue = self.device.newCommandQueue()
@@ -36,14 +39,14 @@ class MetalView(NSView, protocols=[Metal.MTKViewDelegate]):
         render_pass_descriptor = self.metal_layer.currentRenderPassDescriptor()
         
         if drawable is not None and render_pass_descriptor is not None:
+            color_attachment = render_pass_descriptor.colorAttachments().objectAtIndexedSubscript_(0)
+            if self.flash_on:
+                color_attachment.setClearColor_(Metal.MTLClearColorMake(1.0, 1.0, 1.0, 1.0))  # White color
+            else:
+                color_attachment.setClearColor_(Metal.MTLClearColorMake(0.0, 0.0, 0.0, 1.0))  # Black color
+
             command_buffer = self.command_queue.commandBuffer()
             render_encoder = command_buffer.renderCommandEncoderWithDescriptor_(render_pass_descriptor)
-
-            if self.flash_on:
-                render_encoder.setClearColor_(Metal.MTLClearColorMake(1.0, 1.0, 1.0, 1.0))  # White color
-            else:
-                render_encoder.setClearColor_(Metal.MTLClearColorMake(0.0, 0.0, 0.0, 1.0))  # Black color
-
             render_encoder.endEncoding()
             command_buffer.presentDrawable_(drawable)
             command_buffer.commit()
@@ -53,9 +56,9 @@ class MetalView(NSView, protocols=[Metal.MTKViewDelegate]):
 
 class AppDelegate(NSObject):
     def applicationDidFinishLaunching_(self, notification):
-        styleMask = (NSWindowStyleMask.titled | 
-                     NSWindowStyleMask.closable | 
-                     NSWindowStyleMask.resizable)
+        styleMask = (NSWindowStyleMaskTitled | 
+                     NSWindowStyleMaskClosable | 
+                     NSWindowStyleMaskResizable)
 
         self.window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
             NSMakeRect(100, 100, 800, 600),
