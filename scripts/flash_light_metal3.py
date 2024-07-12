@@ -25,14 +25,13 @@ class MetalView(NSView, protocols=[MTKViewDelegate]):
         
         self.command_queue = self.device.newCommandQueue()
         self.flash_on = False
-        self.flash_frequency = 10
+        self.flash_frequency = 10  # Flash frequency in Hz
         self.refresh_rate = 60  # Monitor refresh rate in Hz
         self.frames_per_flash = self.refresh_rate // self.flash_frequency
         self.frame_count = 0
 
         # Debugging information
         self.frame_times = []
-        self.start_time = time.time()
 
         return self
 
@@ -43,16 +42,24 @@ class MetalView(NSView, protocols=[MTKViewDelegate]):
 
         # Log the time a frame was drawn
         self.frame_times.append(current_time)
-        if len(self.frame_times) > 100:  # Keep only the last 100 frame times
+
+        # Calculate FPS for the last 60 frames
+        if len(self.frame_times) > 60:
+            fps_60 = 60 / (self.frame_times[-1] - self.frame_times[-61])
+        else:
+            fps_60 = 0.0
+
+        # Calculate FPS for the last 300 frames
+        if len(self.frame_times) > 300:
+            fps_300 = 300 / (self.frame_times[-1] - self.frame_times[-301])
+        else:
+            fps_300 = 0.0
+
+        # Keep only the last 300 frame times
+        if len(self.frame_times) > 300:
             self.frame_times.pop(0)
 
-        # Calculate FPS
-        if len(self.frame_times) > 1:
-            fps = len(self.frame_times) / (self.frame_times[-1] - self.frame_times[0])
-        else:
-            fps = 0.0
-
-        print(f"Frame: {self.frame_count}, Time: {current_time}, FPS: {fps:.2f}")
+        print(f"Frame: {self.frame_count}, Time: {current_time}, FPS (60): {fps_60:.2f}, FPS (300): {fps_300:.2f}")
 
         drawable = self.metal_layer.currentDrawable()
         render_pass_descriptor = self.metal_layer.currentRenderPassDescriptor()
