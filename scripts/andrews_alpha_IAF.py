@@ -127,7 +127,25 @@ for EEG_stream in range(EEG_streamcount):
     #P_tfr = epochs.compute_tfr(method='multitaper', freqs=freqs_to_check, n_cycles=7,time_bandwidth=4.0, return_itc=False,average=True)
     pick_no_Cz = np.arange(0,30)
     P_psd = epochs.compute_psd(method='multitaper', fmin=freqs_to_check[0], fmax=freqs_to_check[-1],picks=pick_no_Cz)
+    #P_tfr = epochs.compute_tfr(method='morlet', freqs=freqs_to_check, n_cycles=7,time_bandwidth=4.0, return_itc=False,average=True)
     P_psd.plot()
+
+    # Find elevated power
+    a_psd = P_psd.get_data()
+    a_freqs = P_psd.freqs
+
+    ep = 0
+    elec = 17
+    freq_ind_look = np.arange(30,70)
+
+    max_freq_v = max(a_psd[ep][elec][freq_ind_look])
+
+
+
+
+
+
+
 
     
 
