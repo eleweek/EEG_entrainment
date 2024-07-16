@@ -2,18 +2,47 @@ import time
 import pygame
 import sys
 import argparse
+import platform
 
 import numpy as np
 from math import floor
+
+# Uses Community Edition of PyGame, from:
+# pip install pygame-ce --upgrade
+
+
+def flicker_freq_calc(desired_flick,mon_freq):
+    # Imagine one bright frame, followed by some integer number of dark frames
+    dark_frame_count = np.zeros(mon_freq[0])
+    both_frame_count = np.zeros(mon_freq[0])
+    flicker_rates = np.zeros(mon_freq[0])
+
+    for i in range(mon_freq[0]):
+        dark_frame_count[i] = i
+        both_frame_count[i] = i+1
+        flicker_rates[i] = 1 / (both_frame_count[i] / mon_freq[0])
+
+    # Find closest flicker rate to desired
+    closest_idx = np.searchsorted(flicker_rates[::-1],desired_flick)
+    closest_idx = mon_freq[0] - closest_idx  # inverse as decending above
+
+    print(f"At {mon_freq[0]} Hz hardware refresh, the closest integer flicker to {desired_flick} Hz is {flicker_rates[closest_idx]} Hz, with 1 bright frame and {dark_frame_count[closest_idx]} dark")
+
+    return dark_frame_count[closest_idx], flicker_rates[closest_idx], flicker_rates
+
+
+
 
 def main():
     parser = argparse.ArgumentParser(description="Flash Lights")
     parser.add_argument('--frequency',type=float,default=144.0)
     parser.add_argument('--max_frequency',type=float,default=144.0)
-
+    parser.add_argument('--desired_flicker',type=float,default=10.0)
+    
     args = parser.parse_args()
     frequency = args.frequency
     max_frequency = args.max_frequency
+    desired_flicker = args.desired_flicker
     
     WIDTH = 1920
     HEIGHT = 1080
@@ -25,6 +54,20 @@ def main():
 
     # Set up the display
     screen = pygame.display.set_mode((WIDTH, HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=1)
+    mon_freq = pygame.display.get_desktop_refresh_rates()
+    # Uses Community Edition of PyGame, from:
+    # pip install pygame-ce --upgrade
+
+    if all(x >= frequency for x in mon_freq):
+        print('All monitors can be driven at or above target frequency')
+    else:
+        print('*****')
+        print('WARNING - at least one monitor has refresh BELOW requested frequency')
+        print('*****')
+        time.sleep(0.3)
+    
+    # Check flicker
+    off_frames_per_each_on, flicker_int_target, possible_flicker_rates = flicker_freq_calc(desired_flicker,mon_freq)
 
     # Report vars
     log_len = frequency
@@ -49,7 +92,7 @@ def main():
     target_fps = find_target_fps(frequency, max_frequency=max_frequency)
     interval = 1.0 / target_fps
     #off_frames_per_each_on = int((target_fps - frequency) / frequency)
-    off_frames_per_each_on = 5
+    #off_frames_per_each_on = 5
 
 
     # Define the white rectangle
@@ -122,8 +165,9 @@ def main():
             report_str = f"Apparent frametime of {round(frametime_mean,4)} s, implying {ft_as_Hz} Hz real draw rate"
             print(report_str)
 
-            report_rect = f"Rect on for {sum(recent_rect_on)}, so {sum(recent_rect_on)} Hz target flicker, {round(sum(recent_rect_on)/(log_time / 1e9),2)} Hz real"
+            report_rect = f"Rect on for {sum(recent_rect_on)}, so {sum(recent_rect_on)} Hz target flicker, {round(sum(recent_rect_on)/(log_time / 1e9),2)} Hz real, and {flicker_int_target} integer frame target"
             print(report_rect)
+            recent_rect_on = np.zeros(int(log_len))
 
             print()
 
