@@ -138,7 +138,14 @@ for EEG_stream in range(EEG_streamcount):
     elec = 17
     freq_ind_look = np.arange(30,70)
 
+    max_freq_v = np.argmax(a_psd[ep][elec][freq_ind_look])
     max_freq_v = max(a_psd[ep][elec][freq_ind_look])
+
+    
+
+
+
+
 
 
 
