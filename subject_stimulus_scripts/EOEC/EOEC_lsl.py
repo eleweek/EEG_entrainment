@@ -66,19 +66,12 @@ n_trials_per_block = 2
 n_blocks = 3
 audio_filenames = ['/open.wav','/close.wav']
 
-# make at least n_trials with alternating audio_filenames
-trials_structure = audio_filenames * n_blocks
-
 send_trig(0, 'xx_EOEC_begin')
 
 # trial_loop
 t_n = n_trials_per_block * n_blocks
 t=0
 play_time = 30  # seconds
-
-trial_text_list = ["0"] *2
-trial_text_list[0] = "Now, please: --  "
-
 
 
 user_confirms = input("LSL Stream started. Confirm recording start if needed. [Y]/N \n")
@@ -87,15 +80,15 @@ user_confirms = input("LSL Stream started. Confirm recording start if needed. [Y
 # Trial loop
 while t<t_n:
 
-    s1 = load_sound(trials_structure[t])
+    s1 = load_sound(audio_filenames[t % 2])
     mix_stream = p.open(format=p.get_format_from_width(int(s1.getsampwidth())), channels=int(s1.getnchannels()), rate=s1.getframerate(), output=True, output_device_index=output_device_num)
 
-    text_start = f"{t+1} EOEC {trials_structure[t]}"
+    text_start = f"{t+1} EOEC {audio_filenames[t % 2]}"
     send_trig(t+1, text_start)
     print(text_start)
 
     # Update screen loop
-    pt=0
+    pt = 0
     while pt < play_time:  # while there are still bytes to play, read frames and write to stream
         pt += 1
         
@@ -104,12 +97,12 @@ while t<t_n:
         pygame.event.get()
         screen.fill(wht)
 
-        trial_text_here = f"Trial {t+1} Sec {pt+1} - Now, please ensure eyes are {trials_structure[t][1:-4]}"
+        trial_text_here = f"Trial {t+1} Sec {pt+1} - Now, please ensure eyes are {audio_filenames[t % 2][1:-4]}"
         text = font.render(trial_text_here, True, gry)
         screen.blit(text, text_rect)
         display_report = pygame.display.flip()
 
-        if pt==1:  
+        if pt == 1:  
             splay1 = s1.readframes(s1.getnframes())
             splay1_decode = np.frombuffer(splay1, np.int8)
             mix_stream.write(splay1_decode)
@@ -118,7 +111,7 @@ while t<t_n:
 
     
 
-    t = t+1
+    t += 1
 
     mix_stream.close()
 
@@ -129,4 +122,3 @@ mix_stream.close()
 goodbye_text = f"Session EOEC complete with {t} trials"
 print(goodbye_text)
 p.terminate
-
