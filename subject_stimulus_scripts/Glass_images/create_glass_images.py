@@ -36,6 +36,8 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
     else:
         # For radial stim, dot twin should be straight line from center
         rotation = 0
+        i_mov = round(sqrt(dot_offset_px*dot_offset_px)/2) # Assume square screen aperature
+        
 
 
 
@@ -96,6 +98,29 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
                         # Not circular spiral, so linear here
                         # Get a straight line from center to this pixel.
                         # Continue this line by x pixels, and draw the twin dot there
+                       
+                        
+                        if i < center[0]:
+                            new_x = round(i-i_mov)
+                            if j < center[1]:
+                                new_y = round(j-i_mov)
+                            else:
+                                new_y = round(j+i_mov)
+                        else:
+                            new_x = round(i+i_mov)
+                            if j < center[1]:
+                                new_y = round(j-i_mov)
+                            else:
+                                new_y = round(j+i_mov)
+                        
+                        if 0 < new_x < width:
+                            if 0 < new_y < height:
+                                # Add a linear pixel twin here
+                                image[new_x, new_y] = glass_color
+                                dot_good_twin_count += 1
+                                dot_count += 1
+
+
 
                                 
                         
@@ -141,7 +166,7 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
 
 if __name__ == "__main__":
     # Plot the image when called as main
-    image, Glass_props = make_glass(circ_here = True, SNR_signal_frac_desired = 0.3)
+    image, Glass_props = make_glass(circ_here = False, SNR_signal_frac_desired = 1)
     plt.imshow(image)
     plt.show()
 
