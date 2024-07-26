@@ -57,17 +57,38 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
     dot_orig_count = 0
     dot_good_twin_count = 0
     dot_noise_count = 0
+    twin_draw_due = False
+    frac_twinned_so_far = 0.9
+
     for i in range(width):
         for j in range(height):
             if random.random() < initial_dot_density and dot_count < max_dots:
+                dot_draw_due = True
+            else:
+                dot_draw_due = False
+                    
+            if dot_draw_due:
                 dot_orig_count += 1
                 dot_count += 1
 
                 image[i, j] = glass_color
 
+                # Should we draw a twin of this dot now?
+                
+                if dot_good_twin_count > 5:
+                    frac_twinned_so_far = (2*dot_good_twin_count) / dot_orig_count
+
+                if frac_twinned_so_far < dot_twin_frac:
+                    if random.random() < (1.8 * dot_twin_frac):  # 'Catch up' if off-screen draws put us under count
+                        twin_draw_due = True
+                else:
+                    if random.random() < (1.3 * dot_twin_frac):
+                        twin_draw_due = True
+
                 # Draw 'twin' dot IFF
-                if random.random() < dot_twin_frac:
+                if twin_draw_due:
                     # Pixel shall add to signal
+                    twin_draw_due = False
 
                     pts_vs_center = (i-center[0], j-center[1])
                     theta = (degrees(atan2(pts_vs_center[1],pts_vs_center[0])) + 360.0) % 360.0
@@ -88,11 +109,18 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
                         new_x = round(center[0] + new_r * np.cos(radians(new_theta)))
                         new_y = round(center[1] + new_r * np.sin(radians(new_theta)))
 
+                        fits_here = False
                         if 0 < new_x < width:
                             if 0 < new_y < height:
-                                image[new_x, new_y] = glass_color
-                                dot_good_twin_count += 1
-                                dot_count += 1
+                                fits_here = True
+                        
+                        if fits_here:
+                            image[new_x, new_y] = glass_color
+                            dot_good_twin_count += 1
+                            dot_count += 1
+                        else:
+                            dot_noise_count += 1  # can't be twinned here, so this is 'noise'
+
                     
                     else:
                         # Not circular spiral, so linear here
@@ -113,18 +141,23 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
                             else:
                                 new_y = round(j+i_mov)
                         
+                        fits_here = False
                         if 0 < new_x < width:
                             if 0 < new_y < height:
-                                # Add a linear pixel twin here
-                                image[new_x, new_y] = glass_color
-                                dot_good_twin_count += 1
-                                dot_count += 1
+                                fits_here = True
+                        
+                        if fits_here:
+                            # Add a linear pixel twin here
+                            image[new_x, new_y] = glass_color
+                            dot_good_twin_count += 1
+                            dot_count += 1
+                        else:
+                            dot_noise_count += 1  # can't be twinned here, so this is 'noise'
 
 
 
                                 
                         
-
 
                     if debug:
                         debug_str = f"Pts {pts_vs_center} with angle {theta}"
@@ -140,7 +173,7 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
 
     SNR_signal_frac_empirical = (2*dot_good_twin_count) / (dot_noise_count + (2*dot_good_twin_count))
     SNR_signal_frac_empirical = round(SNR_signal_frac_empirical,3)
-    summary_str2 = f"S - {2*dot_good_twin_count} N - {dot_noise_count}; SNR Signal Fraction - {SNR_signal_frac_empirical}"
+    summary_str2 = f"S - {2*dot_good_twin_count} N - {dot_noise_count}; SNR Signal reqested/actual {SNR_signal_frac_desired} / {SNR_signal_frac_empirical}"
     print(summary_str2)
 
     dot_density_empirical = round(dot_count / canvas_size,2)
@@ -166,7 +199,7 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
 
 if __name__ == "__main__":
     # Plot the image when called as main
-    image, Glass_props = make_glass(circ_here = False, SNR_signal_frac_desired = 1)
+    image, Glass_props = make_glass(circ_here = True, SNR_signal_frac_desired = 0.5)
     plt.imshow(image)
     plt.show()
 
