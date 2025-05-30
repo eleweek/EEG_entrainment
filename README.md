@@ -4,14 +4,22 @@ TODO: fill in the project description section
 
 ## Replication Hardware
 
-### Alexander's
+### Alexander's Hardware
 
 1. EEG Headset: [OpenBCI Ultracortex "Mark IV" EEG Headset](https://shop.openbci.com/products/ultracortex-mark-iv) with [8-channel Cyton Board](https://shop.openbci.com/products/cyton-biosensing-board-8-channel) and [ThinkPulse Active Electrodes](https://shop.openbci.com/products/thinkpulse-active-electrode-8-channel-starter-kit)
 2. Monitor: LG UltraGear 24GQ50F 1920×1080 with AMD FreeSync (AMD's VSync) 48..165 Hz. Available fixed refresh rates: 165 Hz, 144 Hz, 120 Hz, 100 Hz, 60 Hz, 50 Hz. Potentially overclocks to 180  Hz — [here is the page that claims it, but maybe it's a different version, my box doesn't have the -B suffix](https://www.lg.com/uk/monitors/gaming/24gq50f-b/)
 
-### Andrew's
+### Hardware with Andrew
 
-TODO
+1. EEG Headsets:
+1.1 - Biosemi ActiveTwo 32-channel clinical-grade EEG system with active electrodes
+1.2 - OpenBCI Ganglion board (?) with 4-6 passive AgCl electrodes
+1.3 - Various prototype mobile EEG systems
+
+2. Monitors
+2.1 - Gigabye M28U 144 Hz Gsync / FreeSync. Works great on Windows at 144 Hz, and (I think) 120 Hz max on Mac.
+2.2 - 14" Macbook Pro with M3 Pro. Up to 120 Hz 'ProMotion'.
+2.3 - LG OLED TV with 144 Hz??
 
 ## Flicker code
 
