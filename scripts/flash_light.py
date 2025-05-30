@@ -1,3 +1,4 @@
+import sys
 import pygame
 import time
 import numpy as np
@@ -11,7 +12,7 @@ width, height = 400, 400
 screen = pygame.display.set_mode((width, height))
 pygame.display.set_caption("Flashing Square")
 
-monitor_Hz = 144
+monitor_Hz = int(sys.argv[1])
 
 frequency = 8.5
 
@@ -35,13 +36,13 @@ while running:
         if event.type == pygame.QUIT:
             running = False
         if event.type == pygame.KEYDOWN:
+            print("Pygame keydown", event.key, pygame.K_LEFT, pygame.K_RIGHT)
             if event.key == pygame.K_LEFT:
                 frequency -= 0.25
+                print("Decreasing frequency to", frequency)
             if event.key == pygame.K_RIGHT:
                 frequency += 0.25
-
-    
-
+                print("Increasing frequency to", frequency)
 
     
     
