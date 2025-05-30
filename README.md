@@ -35,3 +35,7 @@ Note that the scripts aren't standardised. In particular, some scripts take moni
 2. `python scripts/vsync_test.py`. Full-screen Vsync-toggle test both `pygame_gui` and `pygame`. Press Enter to toggle on/off Vsync to see how it'd affect the FPS that's displayed in the center of the screen.
 
 3. `python scripts/vsync_test.py`. Full-screen Vsync-toggle test that only uses `pygame`, an updated version of the previous script.
+
+## Miscellaneous scripts
+
+1. `python scripts/calculate_possible_flicker_rates.py 175 165 144 120 100`. Calculates possible flicker rates from a list of static fixed refresh rates as well as deltas between them so you can estimate max possible error between a person's IAF and their flicker rate
