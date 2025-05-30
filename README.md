@@ -2,6 +2,17 @@
 
 TODO: fill in the project description section
 
+## Replication Hardware
+
+### Alexander
+
+1. EEG Headset: OpenBCI Ultracortex "Mark IV" EEG Headset with 8-channel Cyton Board and Active Electrodes
+2. Monitor: LG UltraGear 24GQ50F 1920×1080 with AMD FreeSync (AMD's VSync) 48..165 Hz. Available refresh rate: 165 Hz, 144 Hz, 120 Hz, 100 Hz, 60 Hz, 50 Hz.
+
+### Andrew
+
+TODO
+
 ## Flicker code
 
 Currently the repository contains multiple versions of flicker code, each with its own pros and cons. It's unfortunately tricky to generate flicker with a stable rate, so we experimented with different ways of doing it.
