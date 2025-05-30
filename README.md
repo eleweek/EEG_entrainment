@@ -11,15 +11,15 @@ TODO: fill in the project description section
 
 ### Hardware with Andrew
 
-1. EEG Headsets:
-1.1 - Biosemi ActiveTwo 32-channel clinical-grade EEG system with active electrodes
-1.2 - OpenBCI Ganglion board (?) with 4-6 passive AgCl electrodes
-1.3 - Various prototype mobile EEG systems
+1. **EEG Headsets**:
+   - Biosemi ActiveTwo 32-channel clinical-grade EEG system with active electrodes
+   - OpenBCI Ganglion board (?) with 4-6 passive AgCl electrodes
+   - Various prototype mobile EEG systems
 
-2. Monitors
-2.1 - Gigabye M28U 144 Hz Gsync / FreeSync. Works great on Windows at 144 Hz, and (I think) 120 Hz max on Mac.
-2.2 - 14" Macbook Pro with M3 Pro. Up to 120 Hz 'ProMotion'.
-2.3 - LG OLED TV with 144 Hz??
+2. **Monitors**
+   - Gigabye M28U 144 Hz Gsync / FreeSync. Works great on Windows at 144 Hz, and (I think) 120 Hz max on Mac.
+   - 14" Macbook Pro with M3 Pro. Up to 120 Hz 'ProMotion'.
+   - LG OLED TV with 144 Hz??
 
 ## Flicker code
 
