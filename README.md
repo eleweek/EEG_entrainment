@@ -40,6 +40,10 @@ TODO: fill in the project description section
 
 2.  `python3 -m plot.EOEC <xdf file>` plots IAF from eye-open-eye-closed data. Subtracts the two (EO, EC) PSDs from each other and plots the resulting delta on the screen along with the found peak. Additionally plots the EO PSD (concated from all segments) as well as EC PSD (concated from all segments) allowing estimating the difference between these methods. TODO: check if concatenation are performed correctly, as they are currently done by concatenating raw data (which might produce some artifacts).
 
+### Generating glass images
+
+1. `python3 subject_stimulus_scripts/Glass_images/create_glass_images.py --radial --snr 0.5` to generate a radial image with the signal-to-noise ratio of 0.5. Replace `--radial` with `--concentric` for concetric images.
+
 ### Flicker code
 
 Currently the repository contains multiple versions of flicker code, each with its own pros and cons. It's unfortunately tricky to generate flicker with a stable rate, so we experimented with different ways of doing it.
