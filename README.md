@@ -65,7 +65,7 @@ Note that the scripts aren't standardised. In particular, some scripts take moni
 
 2. `python scripts/vsync_test.py`. Full-screen Vsync-toggle test both `pygame_gui` and `pygame`. Press Enter to toggle on/off Vsync to see how it'd affect the FPS that's displayed in the center of the screen.
 
-3. `python scripts/vsync_test.py`. Full-screen Vsync-toggle test that only uses `pygame`, an updated version of the previous script.
+3. `python scripts/vsync_test2.py`. Full-screen Vsync-toggle test that only uses `pygame`, an updated version of the previous script.
 
 ## Miscellaneous scripts
 
