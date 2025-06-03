@@ -42,8 +42,7 @@ def make_glass(circ_here, snr_signal_frac_desired):
     image = np.zeros((width, height, 3), dtype=np.uint8)
 
     # Set the color of the glass
-    glass_color = (127, 127, 127)
-    highlight_color = (250,1,1)
+    glass_color = (255, 255, 255)
 
     center = (round((width - 1) / 2), round((height - 1) / 2))
     debug = False
