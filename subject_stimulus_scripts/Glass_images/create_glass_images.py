@@ -5,12 +5,12 @@
 import random
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
-import time
 from math import atan2, degrees, radians, sqrt
 
 
-def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
+def make_glass(circ_here, snr_signal_frac_desired):
 
     # Define the size of the image
     width = 500
@@ -23,8 +23,7 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
     # random.seed(42)
 
 
-
-    dot_twin_frac = SNR_signal_frac_desired/2
+    dot_twin_frac = snr_signal_frac_desired / 2
 
     initial_dot_density = max_dot_density - dot_twin_frac*max_dot_density
 
@@ -36,10 +35,7 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
     else:
         # For radial stim, dot twin should be straight line from center
         rotation = 0
-        i_mov = round(sqrt(dot_offset_px*dot_offset_px)/2) # Assume square screen aperature
-        
-
-
+        i_mov = round(sqrt(dot_offset_px * dot_offset_px) / 2) # Assume square screen aperature
 
 
     # Create a blank image
@@ -49,7 +45,7 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
     glass_color = (127, 127, 127)
     highlight_color = (250,1,1)
 
-    center = (round((width-1)/2), round((height-1)/2))
+    center = (round((width - 1) / 2), round((height - 1) / 2))
     debug = False
 
     # Draw dots on the image
@@ -90,7 +86,7 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
                     # Pixel shall add to signal
                     twin_draw_due = False
 
-                    pts_vs_center = (i-center[0], j-center[1])
+                    pts_vs_center = (i - center[0], j - center[1])
                     theta = (degrees(atan2(pts_vs_center[1],pts_vs_center[0])) + 360.0) % 360.0
                     # Center is pt (0,0), and max(i),(max(j/2) has 0 deg theta
                     dist_r = sqrt(abs(pts_vs_center[0])**2 + abs(pts_vs_center[1])**2)
@@ -120,26 +116,22 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
                             dot_count += 1
                         else:
                             dot_noise_count += 1  # can't be twinned here, so this is 'noise'
-
-                    
                     else:
                         # Not circular spiral, so linear here
                         # Get a straight line from center to this pixel.
                         # Continue this line by x pixels, and draw the twin dot there
-                       
-                        
                         if i < center[0]:
-                            new_x = round(i-i_mov)
+                            new_x = round(i - i_mov)
                             if j < center[1]:
-                                new_y = round(j-i_mov)
+                                new_y = round(j - i_mov)
                             else:
-                                new_y = round(j+i_mov)
+                                new_y = round(j + i_mov)
                         else:
-                            new_x = round(i+i_mov)
+                            new_x = round(i + i_mov)
                             if j < center[1]:
-                                new_y = round(j-i_mov)
+                                new_y = round(j - i_mov)
                             else:
-                                new_y = round(j+i_mov)
+                                new_y = round(j + i_mov)
                         
                         fits_here = False
                         if 0 < new_x < width:
@@ -155,10 +147,6 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
                             dot_noise_count += 1  # can't be twinned here, so this is 'noise'
 
 
-
-                                
-                        
-
                     if debug:
                         debug_str = f"Pts {pts_vs_center} with angle {theta}"
                         print(debug_str)
@@ -171,9 +159,9 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
     summary_str = f"Found {dot_orig_count} original dots and {dot_good_twin_count} twins, {rotation} deg away"
     print(summary_str) 
 
-    SNR_signal_frac_empirical = (2*dot_good_twin_count) / (dot_noise_count + (2*dot_good_twin_count))
-    SNR_signal_frac_empirical = round(SNR_signal_frac_empirical,3)
-    summary_str2 = f"S - {2*dot_good_twin_count} N - {dot_noise_count}; SNR Signal reqested/actual {SNR_signal_frac_desired} / {SNR_signal_frac_empirical}"
+    snr_signal_frac_empirical = (2 * dot_good_twin_count) / (dot_noise_count + (2 * dot_good_twin_count))
+    snr_signal_frac_empirical = round(snr_signal_frac_empirical,3)
+    summary_str2 = f"S - {2*dot_good_twin_count} N - {dot_noise_count}; SNR Signal reqested/actual {snr_signal_frac_desired} / {snr_signal_frac_empirical}"
     print(summary_str2)
 
     dot_density_empirical = round(dot_count / canvas_size,2)
@@ -183,25 +171,50 @@ def make_glass(circ_here = True, SNR_signal_frac_desired = 0.3):
     # End make Glass, return
     glass_props = {
         'circ_here': circ_here,
-        'SNR_signal_frac_desired': SNR_signal_frac_desired,
-        'SNR_signal_frac_empirical': SNR_signal_frac_empirical,
+        'SNR_signal_frac_desired': snr_signal_frac_desired,
+        'SNR_signal_frac_empirical': snr_signal_frac_empirical,
     }
     return image, glass_props
 
 
-                
-               
-
-
-
-
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Create Glass pattern images with circular or radial patterns')
+    
+    # Create mutually exclusive group for circular/radial
+    pattern_group = parser.add_mutually_exclusive_group(required=True)
+    pattern_group.add_argument('--circular', action='store_true', 
+                              help='Create circular/spiral glass pattern')
+    pattern_group.add_argument('--radial', action='store_true', 
+                              help='Create radial glass pattern')
+    
+    # SNR argument
+    parser.add_argument('--snr', type=float, required=True,
+                       help='Signal-to-noise ratio (0.0 to 1.0)')
+    
+    args = parser.parse_args()
+    
+    # Validate SNR range
+    if not 0.0 <= args.snr <= 1.0:
+        parser.error("SNR must be between 0.0 and 1.0")
+    
+    return args
 
 
 if __name__ == "__main__":
-    # Plot the image when called as main
-    image, Glass_props = make_glass(circ_here = True, SNR_signal_frac_desired = 0.5)
+    # Parse command line arguments
+    args = parse_arguments()
+    
+    # Determine pattern type
+    circ_here = args.circular  # True if circular, False if radial
+    
+    # Create the glass pattern
+    image, Glass_props = make_glass(circ_here=circ_here, snr_signal_frac_desired=args.snr)
+    
+    # Plot the image
     plt.imshow(image)
+    plt.title(f"{'Circular' if circ_here else 'Radial'} Glass Pattern (SNR: {args.snr})")
     plt.show()
 
 else:
-    image, Glass_props = make_glass(circ_here = True, SNR_signal_frac_desired = 0.3)
+    # Default behavior when imported as a module
+    image, Glass_props = make_glass(circ_here=False, snr_signal_frac_desired=0.3)

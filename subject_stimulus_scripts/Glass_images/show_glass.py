@@ -143,7 +143,7 @@ for block in range(n_blocks):
         print(f"Block {block+1} - trial {t+1}")
 
         # Trial prep
-        glass, glass_props = create_glass_images.make_glass(circ_here = True, SNR_signal_frac_desired = 0.6)
+        glass, glass_props = create_glass_images.make_glass(circ_here = True, snr_signal_frac_desired = 0.6)
         glass_rendered = pygame.surfarray.make_surface(glass.transpose((1,0,2)))
         glass_size_x, glass_size_y = glass_rendered.get_size()
         glass_center = [(screen_width-glass_size_x) // 2, (screen_height-glass_size_y) // 2]
