@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 
 from libs.file_formats import load_raw_xdf
 from libs.filters import filter_and_drop_dead_channels
+from libs.parse import parse_picks
 from libs.plot import add_red_line_with_value, plot_psd
 
 
@@ -47,7 +48,7 @@ def plot_subtracted_data(subtracted_data, freqs):
 input_xdf_filename = sys.argv[1]
 
 raw = load_raw_xdf(input_xdf_filename)
-filter_and_drop_dead_channels(raw)
+filter_and_drop_dead_channels(raw, picks=parse_picks(None))
 
 eyes_open_psd = concatenate_and_get_psd(get_raws_from_annotations(raw.annotations, "/open"))
 eyes_closed_psd = concatenate_and_get_psd(get_raws_from_annotations(raw.annotations, "/close"))
