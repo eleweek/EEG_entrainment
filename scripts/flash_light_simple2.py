@@ -1,6 +1,7 @@
 import time
 import pygame
 import sys
+import os
 from math import floor
 
 frequency = float(sys.argv[1])
@@ -12,7 +13,7 @@ HEIGHT = 1080
 pygame.init()
 
 # Set up the display
-screen = pygame.display.set_mode((WIDTH, HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=1)
+screen = pygame.display.set_mode((WIDTH, HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=0)
 
 def find_target_fps(frequency, min_frequency=48, max_frequency=165):
     result = floor(max_frequency / frequency) * frequency
@@ -28,7 +29,7 @@ def find_target_fps(frequency, min_frequency=48, max_frequency=165):
     return result
 
 
-target_fps = find_target_fps(frequency, max_frequency=60)
+target_fps = find_target_fps(frequency)
 interval = 1.0 / target_fps
 off_frames_per_each_on = int((target_fps - frequency) / frequency)
 
