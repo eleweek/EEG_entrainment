@@ -1,9 +1,9 @@
 import objc
-from Cocoa import NSApplication, NSApp, NSWindow, NSMakeRect, NSObject, NSScreen
-from Quartz import CoreGraphics, CGDisplayCopyAllDisplayModes, CGDisplayCopyDisplayMode, CGDisplayModeGetRefreshRate
+from Cocoa import NSApplication, NSApp, NSWindow, NSMakeRect, NSObject, NSScreen, NSColor
+from Quartz import CoreGraphics
 import Metal
 import MetalKit
-from AppKit import NSWindowStyleMaskTitled, NSWindowStyleMaskClosable, NSWindowStyleMaskResizable, NSView
+from AppKit import NSWindowStyleMaskTitled, NSWindowStyleMaskClosable, NSWindowStyleMaskResizable, NSView, NSBackingStoreBuffered
 import time
 
 MTKViewDelegate = objc.protocolNamed('MTKViewDelegate')
@@ -23,62 +23,35 @@ class MetalView(NSView, protocols=[MTKViewDelegate]):
         self.addSubview_(self.metal_layer)
         
         self.command_queue = self.device.newCommandQueue()
-        self.flash_on = False
-        self.flash_frequency = 10  # Flash frequency in Hz
-        self.refresh_rate = 60  # Default value, will be updated later
-        self.frames_per_flash = int(self.refresh_rate // self.flash_frequency)
+        self.flash_frequency = 10.0  # Hz
+        self.start_time = time.time()
         self.frame_count = 0
-
-        self.frame_times = []
-        self.last_refresh_check = 0
-        self.refresh_check_interval = 1  # Check refresh rate every 1 second
 
         return self
 
-    def get_all_display_refresh_rates(self):
-        refresh_rates = []
-        for screen in NSScreen.screens():
-            display_id = screen.deviceDescription()['NSScreenNumber']
-            current_mode = CGDisplayCopyDisplayMode(display_id)
-            refresh_rate = CGDisplayModeGetRefreshRate(current_mode)
-            refresh_rates.append((display_id, refresh_rate))
-        return refresh_rates
-
     def drawInMTKView_(self, view):
         current_time = time.time()
-        self.flash_on = (self.frame_count % self.frames_per_flash) == 0
+        elapsed_time = current_time - self.start_time
+        
+        # Square wave
+        phase = (elapsed_time * self.flash_frequency) % 1.0
+        flash_on = phase < 0.5
+        
         self.frame_count += 1
-
-        self.frame_times.append(current_time)
-
-        if len(self.frame_times) > 60:
-            fps_60 = 60 / (self.frame_times[-1] - self.frame_times[-61])
-        else:
-            fps_60 = 0.0
-
-        if len(self.frame_times) > 300:
-            fps_300 = 300 / (self.frame_times[-1] - self.frame_times[-301])
-            self.frame_times.pop(0)
-        else:
-            fps_300 = 0.0
-
-        refresh_rates = self.get_all_display_refresh_rates()
-
-        print(f"FPS: {fps_60:.2f} {fps_300:.2f} flash = {int(self.flash_on)} "
-              f"Frame: {self.frame_count}, Time: {current_time:.2f}")
-        print(f"Current display refresh rate: {', '.join(str(r[1]) for r in refresh_rates)}")
-        print()
-
+        if self.frame_count % 60 == 0:
+            print(f"Frame: {self.frame_count} | Flash: {flash_on}")
+        
         drawable = self.metal_layer.currentDrawable()
         render_pass_descriptor = self.metal_layer.currentRenderPassDescriptor()
         
-        if drawable is not None and render_pass_descriptor is not None:
+        if drawable and render_pass_descriptor:
             color_attachment = render_pass_descriptor.colorAttachments().objectAtIndexedSubscript_(0)
-            if self.flash_on:
-                color_attachment.setClearColor_(Metal.MTLClearColorMake(1.0, 1.0, 1.0, 1.0))  # White color
+            
+            if flash_on:
+                color_attachment.setClearColor_(Metal.MTLClearColorMake(1.0, 1.0, 1.0, 1.0))
             else:
-                color_attachment.setClearColor_(Metal.MTLClearColorMake(0.0, 0.0, 0.0, 1.0))  # Black color
-
+                color_attachment.setClearColor_(Metal.MTLClearColorMake(0.0, 0.0, 0.0, 1.0))
+            
             command_buffer = self.command_queue.commandBuffer()
             render_encoder = command_buffer.renderCommandEncoderWithDescriptor_(render_pass_descriptor)
             render_encoder.endEncoding()
@@ -90,25 +63,62 @@ class MetalView(NSView, protocols=[MTKViewDelegate]):
 
 class AppDelegate(NSObject):
     def applicationDidFinishLaunching_(self, notification):
-        styleMask = (NSWindowStyleMaskTitled | 
+        screens = NSScreen.screens()
+        
+        # Debug print
+        print(f"Found {len(screens)} screens")
+        for i, screen in enumerate(screens):
+            print(f"Screen {i}: {screen.frame()}")
+        
+        # Choose target screen
+        if len(screens) > 1:
+            target_screen = screens[1]
+            print("Using second screen")
+        else:
+            target_screen = screens[0]
+            print("Using main screen")
+        
+        # Position window on target screen
+        screen_frame = target_screen.frame()
+        # Start with a smaller window that we'll fullscreen
+        initial_rect = NSMakeRect(
+            screen_frame.origin.x + 100,
+            screen_frame.origin.y + 100,
+            800,
+            600
+        )
+        
+        # Create window with proper style masks for fullscreen
+        style_mask = (NSWindowStyleMaskTitled | 
                      NSWindowStyleMaskClosable | 
-                     NSWindowStyleMaskResizable)
-
+                     NSWindowStyleMaskResizable)  # Need resizable for fullscreen!
+        
         self.window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-            NSMakeRect(100, 100, 800, 600),
-            styleMask,
-            CoreGraphics.kCGBackingStoreBuffered,
+            initial_rect,
+            style_mask,
+            NSBackingStoreBuffered,
             False
         )
-        self.window.setTitle_("Flashing Square with Metal")
+        
+        self.window.setTitle_("Metal Flicker")
+        
+        # Create Metal view
         self.view = MetalView.alloc().initWithFrame_(NSMakeRect(0, 0, 800, 600))
         self.window.setContentView_(self.view)
-
-        initial_refresh_rates = self.view.get_all_display_refresh_rates()
-        print(f"Initial display refresh rates: {initial_refresh_rates}")
-
+        
+        # Show window first
         self.window.makeKeyAndOrderFront_(None)
-        self.window.display()
+        
+        # IMPORTANT: Move window to target screen before fullscreen
+        self.window.setFrameOrigin_(screen_frame.origin)
+        
+        # Now toggle fullscreen
+        self.window.toggleFullScreen_(None)
+        
+        print("Window should now be fullscreen on target monitor")
+
+    def applicationShouldTerminateAfterLastWindowClosed_(self, sender):
+        return True
 
 if __name__ == '__main__':
     app = NSApplication.sharedApplication()
