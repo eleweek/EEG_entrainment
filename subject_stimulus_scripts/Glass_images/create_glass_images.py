@@ -119,27 +119,26 @@ def make_glass(circ_here, snr_signal_frac_desired):
                         # Not circular spiral, so linear here
                         # Get a straight line from center to this pixel.
                         # Continue this line by x pixels, and draw the twin dot there
-                        if i < center[0]:
-                            new_x = round(i - i_mov)
-                            if j < center[1]:
-                                new_y = round(j - i_mov)
-                            else:
-                                new_y = round(j + i_mov)
-                        else:
-                            new_x = round(i + i_mov)
-                            if j < center[1]:
-                                new_y = round(j - i_mov)
-                            else:
-                                new_y = round(j + i_mov)
+
+                        angle = np.arctan2(pts_vs_center[1], pts_vs_center[0])
+
+                        # Calculate new position 6 pixels further from center along same angle
+                        new_i = i + dot_offset_px * np.cos(angle)
+                        new_j = j + dot_offset_px * np.sin(angle)
+
+                        # Round to integer pixel coordinates
+                        new_i = int(round(new_i))
+                        new_j = int(round(new_j))
+
                         
                         fits_here = False
-                        if 0 < new_x < width:
-                            if 0 < new_y < height:
+                        if 0 < new_i < width:
+                            if 0 < new_j < height:
                                 fits_here = True
                         
                         if fits_here:
                             # Add a linear pixel twin here
-                            image[new_x, new_y] = glass_color
+                            image[new_i, new_j] = glass_color
                             dot_good_twin_count += 1
                             dot_count += 1
                         else:
@@ -181,13 +180,13 @@ def parse_arguments():
     
     # Create mutually exclusive group for circular/radial
     pattern_group = parser.add_mutually_exclusive_group(required=True)
-    pattern_group.add_argument('--circular', action='store_true', 
+    pattern_group.add_argument('--circular', action='store_true', default=True,
                               help='Create circular/spiral glass pattern')
     pattern_group.add_argument('--radial', action='store_true', 
                               help='Create radial glass pattern')
     
     # SNR argument
-    parser.add_argument('--snr', type=float, required=True,
+    parser.add_argument('--snr', type=float, default=0.5,
                        help='Signal-to-noise ratio (0.0 to 1.0)')
     
     args = parser.parse_args()
@@ -205,13 +204,14 @@ if __name__ == "__main__":
     
     # Determine pattern type
     circ_here = args.circular  # True if circular, False if radial
+    snr_here = args.snr
     
     # Create the glass pattern
-    image, Glass_props = make_glass(circ_here=circ_here, snr_signal_frac_desired=args.snr)
+    image, Glass_props = make_glass(circ_here=circ_here, snr_signal_frac_desired=snr_here)
     
     # Plot the image
     plt.imshow(image)
-    plt.title(f"{'Circular' if circ_here else 'Radial'} Glass Pattern (SNR: {args.snr})")
+    plt.title(f"{'Circular' if circ_here else 'Radial'} Glass Pattern (SNR: {snr_here})")
     plt.show()
 
 else:
