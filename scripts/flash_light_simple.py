@@ -8,7 +8,7 @@ pygame.init()
 
 # Set up the display
 width, height = 400, 400
-screen = pygame.display.set_mode((width, height), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=1)
+screen = pygame.display.set_mode((width, height), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=0)
 pygame.display.set_caption("Flashing Square")
 
 frequency = float(sys.argv[1])
