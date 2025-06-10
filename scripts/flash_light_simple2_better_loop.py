@@ -89,7 +89,7 @@ def main():
         # Update the display
         pygame.display.flip()
         frame_count += 1
-        print(f"{"on " if rectangle_on else "off"}: Flip returned after", time.time() - last_draw_time, "Interval", interval, "Delay", delay, "Expected FPS", 1 / (last_draw_time - previous_draw_time), "Target FPS", target_fps)
+        print(f'{"on " if rectangle_on else "off"}: Flip returned after', time.time() - last_draw_time, "Interval", interval, "Delay", delay, "Expected FPS", 1 / (last_draw_time - previous_draw_time), "Target FPS", target_fps)
         print()
 
 if __name__ == "__main__":
