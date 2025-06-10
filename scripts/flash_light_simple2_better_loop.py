@@ -2,13 +2,12 @@ import time
 import pygame
 import sys
 import argparse
-
 from math import floor
 
 def main():
     parser = argparse.ArgumentParser(description="Flash Lights")
-    parser.add_argument('--frequency',type=float, default=10.0)
-    parser.add_argument('--max-monitor-frequency',type=float, default=60.0)
+    parser.add_argument('--frequency', type=float, default=10.0)
+    parser.add_argument('--max-monitor-frequency', type=float, default=60.0)
 
     args = parser.parse_args()
     frequency = args.frequency
@@ -16,7 +15,6 @@ def main():
     
     WIDTH = 1920
     HEIGHT = 1080
-
     SQUARE_SIDE = 600
 
     # Initialize pygame
@@ -29,8 +27,6 @@ def main():
         result = floor(max_frequency / frequency) * frequency
 
         if result < min_frequency:
-            # It shouldn't happen, but we are throwing an error just in case
-            # For example, if the code is modified in the future
             raise ValueError("Frequency too low")
         
         if result > max_frequency:
@@ -38,11 +34,9 @@ def main():
         
         return result
 
-
     target_fps = find_target_fps(frequency, max_frequency=max_frequency)
     interval = 1.0 / target_fps
     off_frames_per_each_on = int((target_fps - frequency) / frequency)
-
 
     # Define the white rectangle
     rect_width, rect_height = SQUARE_SIDE, SQUARE_SIDE
@@ -54,8 +48,10 @@ def main():
 
     screen.fill((0, 0, 0))
 
-    last_draw_time = time.time()
+    # Use perf_counter for high-precision timing
+    last_draw_time = time.perf_counter()
     previous_draw_time = last_draw_time
+    start_time = last_draw_time  # For drift correction
 
     while True:
         for event in pygame.event.get():
@@ -75,22 +71,38 @@ def main():
         else:
             pygame.draw.rect(screen, (0, 0, 0), (rect_x, rect_y, rect_width, rect_height))
 
-        delay = interval - (time.time() - last_draw_time)
+        # Calculate next frame time to prevent drift
+        next_frame_time = start_time + (frame_count + 1) * interval
+        current_time = time.perf_counter()
+        delay = next_frame_time - current_time
+
         if delay > 0:
-            # Sleep for the most of the delay and then loop until we hit the right moment
-            time.sleep(delay * 0.75)
-            while time.time() < last_draw_time + interval:
-                continue
+            # Sleep for most of the delay
+            if delay > 0.001:  # Only sleep if delay is significant
+                time.sleep(delay * 0.75)
+            
+            # Busy-wait for the remainder for precision
+            while time.perf_counter() < next_frame_time:
+                pass
 
         previous_draw_time = last_draw_time
-        last_draw_time = time.time()
-
+        last_draw_time = time.perf_counter()
 
         # Update the display
         pygame.display.flip()
+        
+        # Calculate actual timing metrics
+        actual_interval = last_draw_time - previous_draw_time
+        actual_fps = 1.0 / actual_interval if actual_interval > 0 else 0
+        timing_error = (actual_interval - interval) * 1000  # in milliseconds
+        
+        print(f'{"ON " if rectangle_on else "OFF"}: '
+              f'Actual FPS: {actual_fps:.2f}, '
+              f'Target FPS: {target_fps:.2f}, '
+              f'Timing error: {timing_error:.3f}ms, '
+              f'Frame: {frame_count}')
+
         frame_count += 1
-        print(f'{"on " if rectangle_on else "off"}: Flip returned after', time.time() - last_draw_time, "Interval", interval, "Delay", delay, "Expected FPS", 1 / (last_draw_time - previous_draw_time), "Target FPS", target_fps)
-        print()
 
 if __name__ == "__main__":
     main()
