@@ -7,12 +7,12 @@ from math import floor
 
 def main():
     parser = argparse.ArgumentParser(description="Flash Lights")
-    parser.add_argument('--frequency',type=float,default=60.0)
-    parser.add_argument('--max_frequency',type=float,default=60.0)
+    parser.add_argument('--frequency',type=float, default=10.0)
+    parser.add_argument('--max-monitor-frequency',type=float, default=60.0)
 
     args = parser.parse_args()
     frequency = args.frequency
-    max_frequency = args.max_frequency
+    max_frequency = args.max_monitor_frequency
     
     WIDTH = 1920
     HEIGHT = 1080
@@ -41,8 +41,7 @@ def main():
 
     target_fps = find_target_fps(frequency, max_frequency=max_frequency)
     interval = 1.0 / target_fps
-    #off_frames_per_each_on = int((target_fps - frequency) / frequency)
-    off_frames_per_each_on = 1
+    off_frames_per_each_on = int((target_fps - frequency) / frequency)
 
 
     # Define the white rectangle
@@ -90,7 +89,7 @@ def main():
         # Update the display
         pygame.display.flip()
         frame_count += 1
-        print("Flip returned after", time.time() - last_draw_time, "Interval", interval, "Delay", delay, "Expected FPS", 1 / (last_draw_time - previous_draw_time), "Target FPS", target_fps)
+        print(f"{"on " if rectangle_on else "off"}: Flip returned after", time.time() - last_draw_time, "Interval", interval, "Delay", delay, "Expected FPS", 1 / (last_draw_time - previous_draw_time), "Target FPS", target_fps)
         print()
 
 if __name__ == "__main__":
