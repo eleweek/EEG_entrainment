@@ -186,22 +186,22 @@ seconds = int(duration_seconds % 60)
 title = f"PSD of the whole recording ({hours:02d}:{minutes:02d}:{seconds:02d}), channels = " + " ".join(raw.ch_names)
 fig_psd, psd_data = plot_psd(psd, title=title, average=not separate_channels)
 
-# Perform sliding window IAF estimation using both methods
-iaf_estimates_original = sliding_window_iaf(raw, iaf_original, window_size=5, step_size=1)
-iaf_estimates_specparam = sliding_window_iaf(raw, iaf_specparam, window_size=5, step_size=1)
-print("Specparam method IAF estimates:", iaf_estimates_specparam)
+# # Perform sliding window IAF estimation using both methods
+# iaf_estimates_original = sliding_window_iaf(raw, iaf_original, window_size=5, step_size=1)
+# iaf_estimates_specparam = sliding_window_iaf(raw, iaf_specparam, window_size=5, step_size=1)
+# print("Specparam method IAF estimates:", iaf_estimates_specparam)
 
-# Plot IAF histograms
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12), sharex=True)
-fig.suptitle('Histogram of IAF Estimates')
+# # Plot IAF histograms
+# fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 12), sharex=True)
+# fig.suptitle('Histogram of IAF Estimates')
 
-plot_iaf_histogram(ax1, iaf_estimates_original, freq_resolution=psd.freqs[1] - psd.freqs[0], color='blue', label='Original Method')
-ax1.set_title('Original Method')
-ax1.legend()
+# plot_iaf_histogram(ax1, iaf_estimates_original, freq_resolution=psd.freqs[1] - psd.freqs[0], color='blue', label='Original Method')
+# ax1.set_title('Original Method')
+# ax1.legend()
 
-plot_iaf_histogram(ax2, iaf_estimates_specparam, freq_resolution=psd.freqs[1] - psd.freqs[0], color='red', label='Specparam Method')
-ax2.set_title('Specparam Method')
-ax2.legend()
+# plot_iaf_histogram(ax2, iaf_estimates_specparam, freq_resolution=psd.freqs[1] - psd.freqs[0], color='red', label='Specparam Method')
+# ax2.set_title('Specparam Method')
+# ax2.legend()
 
 plt.tight_layout()
 
