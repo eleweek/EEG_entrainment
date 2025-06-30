@@ -159,7 +159,7 @@ while True:
         pygame.event.get()
 
         psd = raw.compute_psd(fmin=1.0, fmax=45.0)
-        fig, _ = plot_psd(psd, title="PSD", average=False, ylim=(-20, 30))
+        fig, _ = plot_psd(psd, title="PSD", average=False, ylim=(-20, 95))
 
         psd_plot_pygame_image = plot_to_pygame(agg, fig)
 
