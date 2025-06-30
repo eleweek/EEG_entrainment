@@ -1,0 +1,92 @@
+{
+  "powerDown": [
+    "ON",
+    "ON",
+    "ON",
+    "ON",
+    "ON",
+    "ON",
+    "ON",
+    "ON"
+  ],
+  "gain": [
+    "X8",
+    "X8",
+    "X8",
+    "X8",
+    "X8",
+    "X8",
+    "X8",
+    "X8"
+  ],
+  "inputType": [
+    "NORMAL",
+    "NORMAL",
+    "NORMAL",
+    "NORMAL",
+    "NORMAL",
+    "NORMAL",
+    "NORMAL",
+    "NORMAL"
+  ],
+  "bias": [
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE"
+  ],
+  "srb2": [
+    "CONNECT",
+    "CONNECT",
+    "CONNECT",
+    "CONNECT",
+    "CONNECT",
+    "CONNECT",
+    "CONNECT",
+    "CONNECT"
+  ],
+  "srb1": [
+    "DISCONNECT",
+    "DISCONNECT",
+    "DISCONNECT",
+    "DISCONNECT",
+    "DISCONNECT",
+    "DISCONNECT",
+    "DISCONNECT",
+    "DISCONNECT"
+  ],
+  "previousBias": [
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE",
+    "INCLUDE"
+  ],
+  "previousSrb2": [
+    "CONNECT",
+    "CONNECT",
+    "CONNECT",
+    "CONNECT",
+    "CONNECT",
+    "CONNECT",
+    "CONNECT",
+    "CONNECT"
+  ],
+  "previousInputType": [
+    "NORMAL",
+    "NORMAL",
+    "NORMAL",
+    "NORMAL",
+    "NORMAL",
+    "NORMAL",
+    "NORMAL",
+    "NORMAL"
+  ]
+}
