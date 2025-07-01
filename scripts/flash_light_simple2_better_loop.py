@@ -24,7 +24,7 @@ def main():
     pygame.init()
 
     # Set up the display
-    screen = pygame.display.set_mode((WIDTH, HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE , vsync=0)
+    screen = pygame.display.set_mode((WIDTH, HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE , vsync=1)
 
     def find_target_fps(frequency, min_frequency=48, max_frequency=165):
         result = floor(max_frequency / frequency) * frequency
@@ -54,6 +54,8 @@ def main():
     # Use perf_counter for high-precision timing
     last_draw_time = time.perf_counter()
     previous_draw_time = last_draw_time
+    post_flip_time = time.perf_counter()
+    previous_post_flip_time = time.perf_counter()
     start_time = last_draw_time  # For drift correction
 
     while True:
@@ -93,16 +95,20 @@ def main():
 
         # Update the display
         pygame.display.flip()
+        previous_post_flip_time = post_flip_time
         post_flip_time = time.perf_counter()
         flip_duration = (post_flip_time - last_draw_time) * 1000
         
         # Calculate actual timing metrics
         actual_interval = last_draw_time - previous_draw_time
+        actual_interval_2 = post_flip_time - previous_post_flip_time
         actual_fps = 1.0 / actual_interval if actual_interval > 0 else 0
+        actual_fps_2 = 1.0 / actual_interval_2 if actual_interval > 0 else 0 
         timing_error = (actual_interval - interval) * 1000  # in milliseconds
         
         print(f'{"ON " if rectangle_on else "OFF"}: '
               f'Actual FPS: {actual_fps:.2f}, '
+              f'Actual FPS2: {actual_fps_2:.2f}, '
               f'Target FPS: {target_fps:.2f}, '
               f'Timing error: {timing_error:.3f} ms, '
               f'Frame: {frame_count}, '
