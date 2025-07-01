@@ -104,15 +104,19 @@ def main():
         actual_interval_2 = post_flip_time - previous_post_flip_time
         actual_fps = 1.0 / actual_interval if actual_interval > 0 else 0
         actual_fps_2 = 1.0 / actual_interval_2 if actual_interval > 0 else 0 
-        timing_error = (actual_interval - interval) * 1000  # in milliseconds
+        timing_error = (actual_interval - interval) * 1000 
+        timing_error_2 = (actual_interval_2 - interval) * 1000 
         
         print(f'{"ON " if rectangle_on else "OFF"}: '
-              f'Actual FPS: {actual_fps:.2f}, '
-              f'Actual FPS2: {actual_fps_2:.2f}, '
+              f'FPS pre: {actual_fps:.2f}, '
+              f'FPS post: {actual_fps_2:.2f}, '
               f'Target FPS: {target_fps:.2f}, '
-              f'Timing error: {timing_error:.3f} ms, '
+              f'Error pre: {timing_error:.3f} ms, '
+              f'Error post: {timing_error_2:.3f} ms, '
               f'Frame: {frame_count}, '
               f'Flip time: {flip_duration:.3f} ms')
+        if flip_duration > 2.5:
+            print("Warning: flip duration is high!")
 
         frame_count += 1
 
