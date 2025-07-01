@@ -24,7 +24,7 @@ def main():
     pygame.init()
 
     # Set up the display
-    screen = pygame.display.set_mode((WIDTH, HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN, vsync=1)
+    screen = pygame.display.set_mode((WIDTH, HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE , vsync=0)
 
     def find_target_fps(frequency, min_frequency=48, max_frequency=165):
         result = floor(max_frequency / frequency) * frequency
