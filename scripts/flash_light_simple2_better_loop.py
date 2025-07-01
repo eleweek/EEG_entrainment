@@ -93,7 +93,8 @@ def main():
         previous_draw_time = last_draw_time
         last_draw_time = time.perf_counter()
 
-        # Update the display
+        # if rectangle_on or not (1 < frame_count % (off_frames_per_each_on + 1) <= off_frames_per_each_on):
+        #     pygame.display.flip()
         pygame.display.flip()
         previous_post_flip_time = post_flip_time
         post_flip_time = time.perf_counter()
@@ -115,7 +116,7 @@ def main():
               f'Error post: {timing_error_2:.3f} ms, '
               f'Frame: {frame_count}, '
               f'Flip time: {flip_duration:.3f} ms')
-        if flip_duration > 2.5:
+        if flip_duration > 3.5:
             print("Warning: flip duration is high!")
 
         frame_count += 1
