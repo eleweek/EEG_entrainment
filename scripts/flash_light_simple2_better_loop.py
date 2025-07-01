@@ -3,6 +3,9 @@ import pygame
 import sys
 import argparse
 from math import floor
+import gc
+
+gc.disable()
 
 def main():
     parser = argparse.ArgumentParser(description="Flash Lights")
@@ -90,6 +93,8 @@ def main():
 
         # Update the display
         pygame.display.flip()
+        post_flip_time = time.perf_counter()
+        flip_duration = (post_flip_time - last_draw_time) * 1000
         
         # Calculate actual timing metrics
         actual_interval = last_draw_time - previous_draw_time
@@ -99,8 +104,9 @@ def main():
         print(f'{"ON " if rectangle_on else "OFF"}: '
               f'Actual FPS: {actual_fps:.2f}, '
               f'Target FPS: {target_fps:.2f}, '
-              f'Timing error: {timing_error:.3f}ms, '
-              f'Frame: {frame_count}')
+              f'Timing error: {timing_error:.3f} ms, '
+              f'Frame: {frame_count}, '
+              f'Flip time: {flip_duration:.3f} ms')
 
         frame_count += 1
 
