@@ -38,7 +38,9 @@ TODO: fill in the project description section
 
 1.  `python3 -m plot.alpha <xdf file>` computes IAF and plots various IAF-related plots from a recording via multiple methods. The first one is similar to what the authors of the original papers were doing: it gets a PSD, finds a peak and draws a red line through it. The second and third one slide a window and compute IAF in each of the ones and then plot a distribution of . The first method is fast, the second and the third one are slow (they can be commented out). The script supports multiple formats via `load_recording()` from `file_formats.py`.
 
-2.  `python3 -m plot.EOEC <xdf file>` plots IAF from eye-open-eye-closed data. Subtracts the two (EO, EC) PSDs from each other and plots the resulting delta on the screen along with the found peak. Additionally plots the EO PSD (concated from all segments) as well as EC PSD (concated from all segments) allowing estimating the difference between these methods. TODO: check if concatenation are performed correctly, as they are currently done by concatenating raw data (which might produce some artifacts).
+2.  `python3 -m plot.alpha_report --separate-channels  --picks O1,O2,Oz --chunk-shift 5 --chunk-duration 15 recording.xdf report.html`. Computes a report of how IAF changes over time. Slides a window of size `chunk-duration` seconds (15 in the example) shifting it by `chunk-shift` seconds each. Generates an HTML report that's often easier to interpret than e.g. a spectrogram.
+
+3.  `python3 -m plot.EOEC <xdf file>` plots IAF from eye-open-eye-closed data. Subtracts the two (EO, EC) PSDs from each other and plots the resulting delta on the screen along with the found peak. Additionally plots the EO PSD (concated from all segments) as well as EC PSD (concated from all segments) allowing estimating the difference between these methods. TODO: check if concatenation are performed correctly, as they are currently done by concatenating raw data (which might produce some artifacts).
 
 ### Generating glass images
 

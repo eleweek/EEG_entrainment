@@ -22,8 +22,8 @@ parser = argparse.ArgumentParser(
 parser.add_argument('input_filename', type=str, help='Path to the XDF file')
 parser.add_argument('output_report_filename', type=str, help='Path to the output HTML report file')
 
-parser.add_argument('--chunk_duration', type=float, default=90.0, help='Duration of each chunk in seconds')
-parser.add_argument('--chunk_shift', type=float, default=0.5, help='Shift between chunks in seconds')
+parser.add_argument('--chunk-duration', type=float, default=90.0, help='Duration of each chunk in seconds')
+parser.add_argument('--chunk-shift', type=float, default=0.5, help='Shift between chunks in seconds')
 parser.add_argument('--picks', type=str, default=None, help='Comma or space-separated list of channels to use')
 parser.add_argument('--separate-channels', action='store_true', help='Plot each channel separately')
 
