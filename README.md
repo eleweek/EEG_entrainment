@@ -6,7 +6,7 @@ TODO: fill in the project description section
 
 ### Alexander's Hardware
 
-1. EEG Headset: [OpenBCI Ultracortex "Mark IV" EEG Headset](https://shop.openbci.com/products/ultracortex-mark-iv) with [8-channel Cyton Board](https://shop.openbci.com/products/cyton-biosensing-board-8-channel) and [ThinkPulse Active Electrodes](https://shop.openbci.com/products/thinkpulse-active-electrode-8-channel-starter-kit)
+1. EEG Headset: [OpenBCI Ultracortex "Mark IV" EEG Headset](https://shop.openbci.com/products/ultracortex-mark-iv) with [8-channel Cyton Board](https://shop.openbci.com/products/cyton-biosensing-board-8-channel) and [ThinkPulse Active Electrodes](https://shop.openbci.com/products/thinkpulse-active-electrode-8-channel-starter-kit). Current electrodes: Fp1, Fp2, Fz, C4, Pz, O1, Oz, O2
 2. Monitor: LG UltraGear 24GQ50F 1920×1080 with AMD FreeSync (AMD's VSync) 48..165 Hz. Available fixed refresh rates: 165 Hz, 144 Hz, 120 Hz, 100 Hz, 60 Hz, 50 Hz. Potentially overclocks to 180 Hz — [here is the page that claims it, but maybe it's a different version, my box doesn't have the -B suffix](https://www.lg.com/uk/monitors/gaming/24gq50f-b/)
 
 ### Hardware with Andrew
