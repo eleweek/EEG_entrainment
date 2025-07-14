@@ -5,16 +5,49 @@ import argparse
 from math import floor
 import gc
 
+# TODO: make sure to reenable at some point?
+# We currently don't want the garbage collector to run
+# But in production if we keep it off for a while we need to make sure we are doing
+# manual gc.collect() calls or not using much RAM so that we aren't overflowing
 gc.disable()
 
+def find_target_fps(frequency, target_min_refresh_rate, target_max_refresh_rate):
+    result = floor(target_max_refresh_rate / frequency) * frequency
+
+    if result < target_min_refresh_rate:
+        raise ValueError("Frequency too low")
+
+    if result > target_max_refresh_rate:
+        raise ValueError("Frequency too high")
+
+    return result
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Flash Lights")
-    parser.add_argument('--frequency', type=float, default=10.0)
-    parser.add_argument('--max-monitor-frequency', type=float, default=60.0)
+    parser = argparse.ArgumentParser(description="Flicker. Expects a monitor with a variable refresh rate.")
+
+    parser.add_argument(
+        '--flicker-frequency',
+        type=float,
+        default=10.0
+    )
+
+    parser.add_argument('--target-min-refresh-rate',
+                        type=float,
+                        default=120.0,
+                        help=r"This should be at least 20-25% higher than your min monitor frequency to allow for some jitter in drawing times"
+    )
+
+    parser.add_argument('--target-max-refresh-rate',
+                        type=float,
+                        default=120.0,
+                        help=r"This should be 20-25% lower than your actual max monitor frequency to allow for some jitter in drawing times"
+    )
 
     args = parser.parse_args()
-    frequency = args.frequency
-    max_frequency = args.max_monitor_frequency
+    frequency = args.flicker_frequency
+    target_max_refresh_rate = args.target_max_refresh_rate
+    target_min_refresh_rate = args.target_min_refresh_rate
     
     WIDTH = 1920
     HEIGHT = 1080
@@ -26,18 +59,8 @@ def main():
     # Set up the display
     screen = pygame.display.set_mode((WIDTH, HEIGHT), flags=pygame.SCALED | pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE , vsync=1)
 
-    def find_target_fps(frequency, min_frequency=48, max_frequency=165):
-        result = floor(max_frequency / frequency) * frequency
+    target_fps = find_target_fps(frequency, target_min_refresh_rate, target_max_refresh_rate)
 
-        if result < min_frequency:
-            raise ValueError("Frequency too low")
-        
-        if result > max_frequency:
-            raise ValueError("Frequency too high")
-        
-        return result
-
-    target_fps = find_target_fps(frequency, max_frequency=max_frequency)
     interval = 1.0 / target_fps
     off_frames_per_each_on = int((target_fps - frequency) / frequency)
 
