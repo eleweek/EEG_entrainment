@@ -48,7 +48,7 @@ TODO: fill in the project description section
 
 ### Flicker code
 
-`python3 scripts/flicker.py --flicker-frequency 11 --target-min-refresh-rate 60 --target-max-refresh-rate 120`
+`python3 scripts/flicker.py --flicker-frequency 11 --target-min-refresh-rate 60 --target-max-refresh-rate 120  `
 
 The script currently have the same drawback: the physical size of the flash doesn't necessarily match the target physical size (7.9o × 7.9o (2.3 × 2.3 arc min2 per dot)). We'll implement calculating the physical flash size once the actual flash is stable.
 
