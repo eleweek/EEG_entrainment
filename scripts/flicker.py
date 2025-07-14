@@ -119,9 +119,13 @@ def main():
     previous_post_flip_time = time.perf_counter()
     start_time = last_draw_time  # For drift correction
 
-    flip_ms   = RollingStat('flip_ms',  1000)
-    err_pre   = RollingStat('err_pre',  1000)
-    err_post  = RollingStat('err_post', 1000)
+    flip_ms   = RollingStat('flip_ms',  50 * off_frames_per_each_on)
+    err_pre   = RollingStat('err_pre',  50 * off_frames_per_each_on)
+    err_post  = RollingStat('err_post', 50 * off_frames_per_each_on)
+
+    flip_on_ms   = RollingStat('flip_ms',  50)
+    err_on_pre   = RollingStat('err_pre',  50)
+    err_on_post  = RollingStat('err_post', 50)
 
     while True:
         for event in pygame.event.get():
@@ -176,7 +180,11 @@ def main():
         flip_ms.add(flip_duration)
         err_pre.add(timing_error)
         err_post.add(timing_error_2)
-        
+
+        if rectangle_on:
+            flip_on_ms.add(flip_duration)
+            err_on_pre.add(timing_error)
+            err_on_post.add(timing_error_2)
 
         if flip_duration > 3.5:
             print(f'⚠️  Flip too long: {flip_duration:.3f} ms')
@@ -194,10 +202,17 @@ def main():
             print(f'\n— summary over last {flip_ms.n} frames —')
             for stat in (flip_ms, err_pre, err_post):
                 s = stat.summary_dict()
-                print(f'{stat.name:10s}: mean={s["mean"]:.3f} ms  '
+                print(f'Total {stat.name:10s}: mean={s["mean"]:.3f} ms  '
                     f'std={s["stdev"]:.3f}  min={s["min"]:.3f}  '
-                    f'max={s["max"]:.3f}') 
+                    f'max={s["max"]:.3f}')
+
             print()
+            for stat in (flip_on_ms, err_on_pre, err_on_post):
+                s = stat.summary_dict()
+                print(f'On    {stat.name:10s}: mean={s["mean"]:.3f} ms  '
+                    f'std={s["stdev"]:.3f}  min={s["min"]:.3f}  '
+                    f'max={s["max"]:.3f}')  
+            print("\n")
 
         frame_count += 1
 
