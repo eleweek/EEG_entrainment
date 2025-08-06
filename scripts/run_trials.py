@@ -79,6 +79,92 @@ def run_trial(
     screen.fill((0, 0, 0))
     pygame.display.flip()
 
+    # after clearing the screen post-stimulus
+    W, H = screen.get_size()
+    center = (W // 2, H // 2)
+
+    screen.fill((0, 0, 0))
+    draw_fixation(screen, center)
+    pygame.display.flip()
+
+    ground_truth_side = 'left' if angle_deg == 0.0 else 'right'
+
+    resp_key, correct, rt_ms, timed_out = collect_response_with_feedback(
+        screen, center,
+        timeout_ms=1300,
+        show_feedback=True,
+        correct_side=ground_truth_side    # 'left' or 'right' for that trial
+    )
+
+
+# --- fixation + feedback glyphs ---
+def draw_fixation(screen, center, color=(160,160,160)):
+    x,y = center; s=12; w=2
+    pygame.draw.line(screen, color, (x-s, y), (x+s, y), w)
+    pygame.draw.line(screen, color, (x, y-s), (x, y+s), w)
+
+def draw_tick(screen, center):
+    x,y = center; w=3
+    pygame.draw.lines(screen, (80,200,80), False,
+                      [(x-10, y+2), (x-2, y+10), (x+12, y-8)], w)
+
+def draw_cross(screen, center):
+    x,y = center; w=3
+    pygame.draw.line(screen, (200,80,80), (x-10,y-10), (x+10,y+10), w)
+    pygame.draw.line(screen, (200,80,80), (x-10,y+10), (x+10,y-10), w)
+
+def draw_timeout(screen, center):
+    x,y = center; w=3
+    pygame.draw.circle(screen, (200,180,60), (x,y), 10, w)
+
+# --- response collection with timeout + feedback ---
+def collect_response_with_feedback(screen, center, timeout_ms=1300,
+                                   show_feedback=True, correct_side='left'):
+    """
+    Wait for LEFT/RIGHT within timeout_ms.
+    Returns (resp_key, correct_bool, rt_ms, timed_out)
+    """
+    pygame.event.clear()
+    t0 = time.perf_counter()
+    resp_key = None; rt_ms = None
+
+    while (time.perf_counter() - t0) * 1000 < timeout_ms:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT: raise SystemExit
+            if e.type == pygame.KEYDOWN:
+                if e.key in (pygame.K_LEFT, pygame.K_RIGHT):
+                    resp_key = e.key
+                    rt_ms = int((time.perf_counter() - t0) * 1000)
+                    break
+                if e.key == pygame.K_ESCAPE: raise SystemExit
+        if resp_key is not None:
+            break
+        pygame.time.delay(1)
+
+    timed_out = resp_key is None
+    # decide correctness (you set the ground truth elsewhere)
+    is_left_correct = (correct_side == 'left')
+    if not timed_out:
+        said_left = (resp_key == pygame.K_LEFT)
+        correct = (said_left == is_left_correct)
+    else:
+        correct = False
+
+    if show_feedback:
+        # neutral background, then small glyph at fixation for 100 ms
+        # (paper used a tick/cross at fixation, 100 ms)
+        screen.fill((0,0,0))
+        draw_fixation(screen, center)
+        if timed_out:
+            draw_timeout(screen, center)
+        else:
+            (draw_tick if correct else draw_cross)(screen, center)
+        pygame.display.flip()
+        pygame.time.delay(100)
+
+    return resp_key, correct, rt_ms if rt_ms is not None else -1, timed_out
+
+
 def demo():
     pygame.init()
     WIDTH, HEIGHT = 1920, 1080
@@ -105,10 +191,11 @@ def demo():
         cond = conds[trial % 2]
         delay = random.choice([1,2,3]) + (0.5 if cond == "T" else 0.0)
 
+        angle_deg = 0.0 if random.random() < 0.5 else 90.0
         run_trial(
             screen, aperture_rect, flicker_rect,
             freq_hz=10.0, cycles=15, delay_cycles=delay, stim_ms=200,
-            angle_deg=45.0, snr=0.24, density=0.03, shift_px=14, dot_radius_px=1,
+            angle_deg=angle_deg, snr=0.24, density=0.03, shift_px=14, dot_radius_px=1,
             handed="cw",
             target_min_refresh_rate=120.0, target_max_refresh_rate=120.0,
         )
