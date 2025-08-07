@@ -126,7 +126,9 @@ def main():
     screen = pygame.display.set_mode((W,H),
         flags=pygame.SCALED|pygame.FULLSCREEN|pygame.DOUBLEBUF|pygame.HWSURFACE, vsync=1)
 
-    flick_side = 600
+    # Aperture and flicker are the same size for now
+    # But keeping them as separate rectangles allows for potential customization
+    flick_side = 412
     ap_side = 412
     flick_r = pygame.Rect((W-flick_side)//2,(H-flick_side)//2,flick_side,flick_side)
     ap_r    = pygame.Rect((W-ap_side)//2,(H-ap_side)//2,ap_side,ap_side)
