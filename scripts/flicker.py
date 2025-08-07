@@ -182,7 +182,8 @@ def run_flicker(
         frame_count += 1
 
         # Stop when enough pulses (cycles) have been emitted
-        if cycles is not None and pulses_emitted >= cycles:
+        # And we are not on the flash (so it's only for a brief period)
+        if cycles is not None and not rectangle_on and pulses_emitted >= cycles:
             return {
                 "flip_ms": flip_ms.summary_dict(),
                 "err_pre": err_pre.summary_dict(),
