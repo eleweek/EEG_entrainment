@@ -1,5 +1,9 @@
 # glass_task_fsm.py
-import enum, math, random, time, pygame
+import enum
+import random
+import time
+
+import pygame
 
 from flicker import run_flicker                 # your refactored pulse train
 from glass   import draw_glass                  # your Glass generator
@@ -91,7 +95,7 @@ def run_trial(screen, ap_rect, flick_rect,
             screen.blit(stim_surf, ap_rect.topleft)
             pygame.display.flip()
             stim_on_t = time.perf_counter()
-            resp_dead = stim_on_t + 1.300      # 1.3 s window
+            resp_dead = stim_on_t + stim_ms + 1.300      # 1.3 s window
             phase     = Phase.RESP
 
         elif phase==Phase.RESP:
