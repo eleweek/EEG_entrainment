@@ -1,210 +1,152 @@
-# experiment_glass_with_flicker.py
-import math
-import random
-import time
-import pygame
+# glass_task_fsm.py
+import enum, math, random, time, pygame
 
-from flicker import run_flicker
-from glass import draw_glass
+from flicker import run_flicker                 # your refactored pulse train
+from glass   import draw_glass                  # your Glass generator
 
+# ---------- helpers ----------------------------------------------------------
 def wait_exact(seconds: float):
-    """Busy-wait for precise pre-stim delays """
     t0 = time.perf_counter()
     while (time.perf_counter() - t0) < seconds:
-        pass
+        pygame.event.pump()                     # keep window responsive
 
+def draw_fix(screen, c, col=(160,160,160)):
+    x,y=c 
+    s=12
+    w=2
+    pygame.draw.line(screen,col,(x-s,y),(x+s,y),w); pygame.draw.line(screen,col,(x,y-s),(x,y+s),w)
 
-def run_trial(
-    screen: pygame.Surface,
-    aperture_rect: pygame.Rect,
-    flicker_rect: pygame.Rect,
-    *,
-    freq_hz: float,
-    cycles: int,         # e.g., 15
-    delay_cycles: float, # e.g., 2.0 for P, 2.5 for T
-    stim_ms: int,        # e.g., 200
-    # Glass params (match your previous script)
-    angle_deg: float,
-    snr: float,
-    density: float,
-    shift_px: float,
-    dot_radius_px: int,
-    handed: str = "cw",
-    seed: int | None = None,
-    # flicker scheduling envelope (same as your CLI)
-    target_min_refresh_rate: float = 120.0,
-    target_max_refresh_rate: float = 120.0,
-):
-    W, H = screen.get_size()
+def glyph_tick(screen,c):
+    pygame.draw.lines(screen,(80,200,80),False,[(c[0]-10,c[1]+2),(c[0]-2,c[1]+10),(c[0]+12,c[1]-8)],3)
 
-    # 1) Flicker (pulses)
-    run_flicker(
-        screen, flicker_rect,
-        frequency=freq_hz,
-        target_min_refresh_rate=target_min_refresh_rate,
-        target_max_refresh_rate=target_max_refresh_rate,
-        cycles=cycles,                    # blocks until N ON-pulses shown
-        report_every=10_000               # quiet
-    )
+def glyph_cross(screen,c):
+    pygame.draw.line(screen,(200,80,80),(c[0]-10,c[1]-10),(c[0]+10,c[1]+10),3)
+    pygame.draw.line(screen,(200,80,80),(c[0]-10,c[1]+10),(c[0]+10,c[1]-10),3)
 
-    # 2) Pre-stimulus delay at the intended phase offset
-    wait_exact(delay_cycles / freq_hz)
+# ---------- finite-state machine --------------------------------------------
+class Phase(enum.Enum):
+    FIX   = 0
+    FLICK = 1
+    DELAY = 2
+    STIM  = 3
+    RESP  = 4
+    FB    = 5
 
-    # 3) Draw Glass pattern off-screen, then blit to aperture
-    aw, ah = aperture_rect.size
-    stim = pygame.Surface((aw, ah))
-    # Center in its own surface
-    draw_glass(
-        stim,
-        center=(aw // 2, ah // 2),
-        size=aw,                          # square aperture
-        angle_deg=angle_deg,
-        snr=snr,
-        density=density,
-        shift=shift_px,
-        dot_r=dot_radius_px,
-        handed=handed,
-        seed=seed if seed is not None else random.randrange(1 << 30),
-    )
+def run_trial(screen, ap_rect, flick_rect,
+              *, freq_hz, cycles, delay_cycles, stim_ms,
+              angle_deg, snr, density, shift_px, dot_r_px, seed):
+    W,H   = screen.get_size()
+    center= (W//2,H//2)
 
-    # Clear frame, blit stimulus, flip
-    screen.fill((0, 0, 0))
-    screen.blit(stim, aperture_rect.topleft)
-    pygame.display.flip()
+    # pre-render Glass during previous ITI (we do it here for brevity)
+    stim_surf = pygame.Surface(ap_rect.size)
+    draw_glass(stim_surf, center=(ap_rect.w//2,ap_rect.h//2), size=ap_rect.w,
+               angle_deg=angle_deg, snr=snr, density=density,
+               shift=shift_px, dot_r=dot_r_px, handed="cw", seed=seed)
 
-    # Keep it for stim_ms
-    pygame.time.delay(stim_ms)
+    # determine ground-truth key
+    gt_left = (angle_deg == 0.0)          # concentric→LEFT, radial→RIGHT
 
-    # Clear after stimulus window (optional)
-    screen.fill((0, 0, 0))
-    pygame.display.flip()
+    phase      = Phase.FIX
+    stim_on_t  = None
+    resp_dead  = None
+    feedback_t = None
+    resp_key   = None; correct=False; timed_out=False; rt_ms=-1
 
-    # after clearing the screen post-stimulus
-    W, H = screen.get_size()
-    center = (W // 2, H // 2)
+    clock = pygame.time.Clock()
+    run   = True
+    while run:
+        # ------------ 1. pump events once/frame -------------
+        events = pygame.event.get()
+        for e in events:
+            if e.type==pygame.QUIT or (e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE):
+                pygame.quit(); raise SystemExit
+            if phase==Phase.RESP and e.type==pygame.KEYDOWN and e.key in (pygame.K_LEFT,pygame.K_RIGHT):
+                resp_key = e.key
+                rt_ms = int((time.perf_counter()-stim_on_t)*1000)
+                correct = ( (resp_key==pygame.K_LEFT)==gt_left )
+                timed_out=False
+                phase   = Phase.FB
+                feedback_t = time.perf_counter()
 
-    screen.fill((0, 0, 0))
-    draw_fixation(screen, center)
-    pygame.display.flip()
+        # ------------ 2. state logic ------------------------
+        now = time.perf_counter()
 
-    ground_truth_side = 'left' if angle_deg == 0.0 else 'right'
+        if phase==Phase.FIX:
+            screen.fill((0,0,0)); draw_fix(screen, center)
+            phase = Phase.FLICK
 
-    resp_key, correct, rt_ms, timed_out = collect_response_with_feedback(
-        screen, center,
-        timeout_ms=1300,
-        show_feedback=True,
-        correct_side=ground_truth_side    # 'left' or 'right' for that trial
-    )
+        elif phase==Phase.FLICK:
+            run_flicker(screen, flick_rect, frequency=freq_hz,
+                        target_min_refresh_rate=120, target_max_refresh_rate=120,
+                        cycles=cycles, report_every=10_000)
+            phase = Phase.DELAY
 
+        elif phase==Phase.DELAY:
+            wait_exact(delay_cycles/freq_hz)
+            phase     = Phase.STIM
 
-# --- fixation + feedback glyphs ---
-def draw_fixation(screen, center, color=(160,160,160)):
-    x,y = center; s=12; w=2
-    pygame.draw.line(screen, color, (x-s, y), (x+s, y), w)
-    pygame.draw.line(screen, color, (x, y-s), (x, y+s), w)
+        elif phase==Phase.STIM:
+            screen.fill((0,0,0))
+            screen.blit(stim_surf, ap_rect.topleft)
+            pygame.display.flip()
+            stim_on_t = time.perf_counter()
+            resp_dead = stim_on_t + 1.300      # 1.3 s window
+            phase     = Phase.RESP
 
-def draw_tick(screen, center):
-    x,y = center; w=3
-    pygame.draw.lines(screen, (80,200,80), False,
-                      [(x-10, y+2), (x-2, y+10), (x+12, y-8)], w)
+        elif phase==Phase.RESP:
+            # keep stimulus up for full 200 ms
+            if now - stim_on_t >= stim_ms/1000:
+                screen.fill((0,0,0))
+                draw_fix(screen, center)
+                pygame.display.flip()
 
-def draw_cross(screen, center):
-    x,y = center; w=3
-    pygame.draw.line(screen, (200,80,80), (x-10,y-10), (x+10,y+10), w)
-    pygame.draw.line(screen, (200,80,80), (x-10,y+10), (x+10,y-10), w)
+            if now >= resp_dead and resp_key is None:
+                timed_out=True; correct=False; rt_ms=-1
+                phase = Phase.FB
+                feedback_t = now
 
-def draw_timeout(screen, center):
-    x,y = center; w=3
-    pygame.draw.circle(screen, (200,180,60), (x,y), 10, w)
+        elif phase==Phase.FB:
+            screen.fill((0,0,0)); draw_fix(screen, center)
+            if not timed_out:
+                (glyph_tick if correct else glyph_cross)(screen, center)
+            pygame.display.flip()
+            if now - feedback_t >= 0.100:      # 100 ms feedback
+                run = False                       # trial finished
 
-# --- response collection with timeout + feedback ---
-def collect_response_with_feedback(screen, center, timeout_ms=1300,
-                                   show_feedback=True, correct_side='left'):
-    """
-    Wait for LEFT/RIGHT within timeout_ms.
-    Returns (resp_key, correct_bool, rt_ms, timed_out)
-    """
-    pygame.event.clear()
-    t0 = time.perf_counter()
-    resp_key = None; rt_ms = None
+        # ------------ 3. flip already done where needed -----
+        clock.tick(120)                        # cap to 120 Hz
 
-    while (time.perf_counter() - t0) * 1000 < timeout_ms:
-        for e in pygame.event.get():
-            if e.type == pygame.QUIT: raise SystemExit
-            if e.type == pygame.KEYDOWN:
-                if e.key in (pygame.K_LEFT, pygame.K_RIGHT):
-                    resp_key = e.key
-                    rt_ms = int((time.perf_counter() - t0) * 1000)
-                    break
-                if e.key == pygame.K_ESCAPE: raise SystemExit
-        if resp_key is not None:
-            break
-        pygame.time.delay(1)
+    return resp_key, correct, rt_ms, timed_out
 
-    timed_out = resp_key is None
-    # decide correctness (you set the ground truth elsewhere)
-    is_left_correct = (correct_side == 'left')
-    if not timed_out:
-        said_left = (resp_key == pygame.K_LEFT)
-        correct = (said_left == is_left_correct)
-    else:
-        correct = False
-
-    if show_feedback:
-        # neutral background, then small glyph at fixation for 100 ms
-        # (paper used a tick/cross at fixation, 100 ms)
-        screen.fill((0,0,0))
-        draw_fixation(screen, center)
-        if timed_out:
-            draw_timeout(screen, center)
-        else:
-            (draw_tick if correct else draw_cross)(screen, center)
-        pygame.display.flip()
-        pygame.time.delay(100)
-
-    return resp_key, correct, rt_ms if rt_ms is not None else -1, timed_out
-
-
-def demo():
+# ---------- demo main --------------------------------------------------------
+def main():
     pygame.init()
-    WIDTH, HEIGHT = 1920, 1080
-    screen = pygame.display.set_mode(
-        (WIDTH, HEIGHT),
-        flags=pygame.SCALED | pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE,
-        vsync=1
-    )
+    W,H = 1920,1080
+    screen = pygame.display.set_mode((W,H),
+        flags=pygame.SCALED|pygame.FULLSCREEN|pygame.DOUBLEBUF|pygame.HWSURFACE, vsync=1)
 
-    # Geometry: big central flicker; smaller central aperture for Glass
-    flicker_side = 600
-    aperture_side = 412                  # ~7.9° at your earlier 83 cm example
-    flicker_rect  = pygame.Rect((WIDTH - flicker_side)//2,  (HEIGHT - flicker_side)//2,  flicker_side,  flicker_side)
-    aperture_rect = pygame.Rect((WIDTH - aperture_side)//2, (HEIGHT - aperture_side)//2, aperture_side, aperture_side)
+    flick_side = 600
+    ap_side = 412
+    flick_r = pygame.Rect((W-flick_side)//2,(H-flick_side)//2,flick_side,flick_side)
+    ap_r    = pygame.Rect((W-ap_side)//2,(H-ap_side)//2,ap_side,ap_side)
 
-    running = True
-    trial = 0
-    conds = ["P", "T"]                   # alternate P-match / T-match
-    while running:
+
+    conds = ["P","T"]
+    trial=0
+    while True:
         for e in pygame.event.get():
-            if e.type == pygame.QUIT or (e.type == pygame.KEYDOWN and e.key == pygame.K_ESCAPE):
-                running = False
-
-        cond = conds[trial % 2]
-        delay = random.choice([1,2,3]) + (0.5 if cond == "T" else 0.0)
-
-        angle_deg = 0.0 if random.random() < 0.5 else 90.0
-        run_trial(
-            screen, aperture_rect, flicker_rect,
-            freq_hz=10.0, cycles=15, delay_cycles=delay, stim_ms=200,
-            angle_deg=angle_deg, snr=0.24, density=0.03, shift_px=14, dot_radius_px=1,
-            handed="cw",
-            target_min_refresh_rate=120.0, target_max_refresh_rate=120.0,
-        )
-
+            if e.type==pygame.QUIT or (e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE):
+                pygame.quit(); return
+        cond  = conds[trial%2]
+        delay = random.choice([1,2,3]) + (0.5 if cond=="T" else 0.0)
+        angle = 0.0 if random.random()<0.5 else 90.0
+        run_trial(screen, ap_r, flick_r,
+                  freq_hz=10.0, cycles=15, delay_cycles=delay, stim_ms=200,
+                  angle_deg=angle, snr=0.24, density=0.03,
+                  shift_px=14, dot_r_px=1, seed=random.randrange(1<<30))
         trial += 1
+        pygame.time.delay(1200)        # ITI, TODO: jitter
 
-        pygame.time.delay(1200)
-
-    pygame.quit()
-
-if __name__ == "__main__":
-    demo()
+if __name__=="__main__":
+    main()
