@@ -44,10 +44,9 @@ class Phase(enum.Enum):
 
 # ============================ Small drawing helpers ===========================
 
-def draw_fixation(screen: pygame.Surface, center: tuple[int,int], color=(160,160,160)):
-    x,y = center; s=12; w=2
-    pygame.draw.line(screen, color, (x-s, y), (x+s, y), w)
-    pygame.draw.line(screen, color, (x, y-s), (x, y+s), w)
+def draw_fixation(screen: pygame.Surface, center: tuple[int,int], color=(120, 120, 120)):
+    radius_px = 5
+    pygame.draw.circle(screen, color, center, radius_px)
 
 def glyph_tick(screen, c):
     pygame.draw.lines(screen,(80,200,80),False,[(c[0]-10,c[1]+2),(c[0]-2,c[1]+10),(c[0]+12,c[1]-8)],3)
