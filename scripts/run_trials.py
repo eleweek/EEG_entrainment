@@ -113,6 +113,7 @@ def run_one_trial(
     resp_key = None
     correct = False
     timed_out = False
+    response_enabled = False
     rt_ms = -1
 
     # Prepare static background frame (black)
@@ -135,7 +136,7 @@ def run_one_trial(
                     use_debug_overlay = not use_debug_overlay
 
                 # Accept arrows during STIM and RESP phases
-                if e.key in (pygame.K_LEFT, pygame.K_RIGHT) and phase in (Phase.STIM, Phase.RESP):
+                if e.key in (pygame.K_LEFT, pygame.K_RIGHT) and response_enabled and phase in (Phase.STIM, Phase.RESP):
                     resp_key = e.key
                     rt_ms = int((time.perf_counter() - stim_on_t) * 1000)
                     said_left = (resp_key == pygame.K_LEFT)
@@ -178,9 +179,12 @@ def run_one_trial(
                 pygame.draw.rect(screen, (0,255,0), flicker_rect, 1)
                 pygame.draw.rect(screen, (255,0,0), aperture_rect, 1)
                 draw_fixation(screen, center_screen, (0,0,255))
-            pygame.display.flip()
+
+            pygame.event.clear() # drop any pre-onset key presses
+            pygame.display.flip() # stimulus appears
 
             stim_on_t = time.perf_counter()
+            response_enabled = True 
             # total window = 200 ms stimulus + 1.3 s fixation
             resp_deadline = stim_on_t + (task.stim_ms + task.resp_extra_ms) / 1000.0
             phase = Phase.RESP
@@ -203,10 +207,12 @@ def run_one_trial(
                 timed_out = True
                 correct = False
                 rt_ms = -1
+                response_enabled = False
                 phase = Phase.FB
                 fb_deadline = now + task.feedback_ms/1000.0
 
         elif phase == Phase.FB:
+            response_enabled = False
             # Show 100 ms feedback (paper showed only after response; you can skip for timeouts)
             screen.fill((0,0,0))
             draw_fixation(screen, center_screen)
