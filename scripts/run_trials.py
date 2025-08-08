@@ -153,13 +153,17 @@ def run_one_trial(
             phase = Phase.FLICK
 
         elif phase == Phase.FLICK:
+            def _draw_fix_on_off_frames(s: pygame.Surface):
+                draw_fixation(s, center_screen)
+
             run_flicker(
                 screen, flicker_rect,
                 frequency=task.freq_hz,
                 target_min_refresh_rate=120.0,
                 target_max_refresh_rate=120.0,
                 cycles=task.cycles,
-                report_every=10_000
+                report_every=10_000,
+                overlay_off_frame=_draw_fix_on_off_frames,
             )
             phase = Phase.DELAY
 

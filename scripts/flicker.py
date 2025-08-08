@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from collections import deque
 
 import pygame
+from typing import Callable, Optional
 
 
 REPORT_EVERY = 300
@@ -58,6 +59,7 @@ def run_flicker(
     target_max_refresh_rate: float,
     cycles: int | None = None,
     report_every: int = REPORT_EVERY,
+    overlay_off_frame: Optional[Callable[[pygame.Surface], None]] = None,
 ):
     """
     Flicker a centered rectangle as 1-frame ON followed by N OFF frames so that
@@ -125,6 +127,8 @@ def run_flicker(
             pygame.draw.rect(screen, (255, 255, 255), rect)
         else:
             pygame.draw.rect(screen, (0, 0, 0), rect)
+            if overlay_off_frame is not None:
+                overlay_off_frame(screen)
 
         # Drift-free target time for next frame
         next_frame_time = start_time + (frame_count + 1) * interval
