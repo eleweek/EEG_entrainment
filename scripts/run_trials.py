@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS trial(
   session_id TEXT,
   trial_index INTEGER,
   cond TEXT,
+  block INTEGER,
   delay_cycles REAL,
   angle_deg REAL,
   snr_level REAL,
@@ -368,7 +369,10 @@ def run_one_trial(
     push_marker(outlet, "trial_end", trial=trial_index, correct=bool(correct), timeout=bool(timed_out))
     return resp_key, correct, rt_ms, timed_out
 
-# ============================ CLI / Main =====================================
+def sample_abs_jitter(min_abs: float, max_abs: float) -> float:
+    """Return a signed absolute jitter in *absolute SNR units* (e.g., ±0.01..±0.03)."""
+    amp = random.uniform(min_abs, max_abs)
+    return amp if random.random() < 0.5 else -amp
 
 def main():
     ap = argparse.ArgumentParser(description="Glass-pattern trials with IAF flicker (FSM) + SQLite + LSL.")
@@ -376,10 +380,18 @@ def main():
     ap.add_argument("--session", type=str, default=None, help="Session ID (default: auto)")
     ap.add_argument("--db", type=str, default="study.db", help="SQLite DB path")
     ap.add_argument("--stimdir", type=str, default="stimuli", help="Directory to save stimulus PNGs")
+
     ap.add_argument("--iaf", type=float, default=None, help="Optional IAF (Hz) to store in session metadata")
     ap.add_argument("--freq", type=float, default=10.0, help="Flicker frequency (Hz)")
     ap.add_argument("--cycles", type=int, default=15, help="Number of pulses before target")
-    ap.add_argument("--trials", type=int, default=20, help="How many trials to run")
+
+    # --- NEW: block design & SNR/jitter control ---
+    ap.add_argument("--blocks", type=int, default=6, help="Number of blocks (alternating P/T)")
+    ap.add_argument("--tperblock", type=int, default=60, help="Trials per block")
+    ap.add_argument("--snr", type=float, default=0.24, help="Base SNR (signal proportion)")
+    ap.add_argument("--jitter-min", type=float, default=0.01, help="Min absolute jitter (e.g., 0.01 = 1%%)")
+    ap.add_argument("--jitter-max", type=float, default=0.03, help="Max absolute jitter (e.g., 0.03 = 3%%)")
+
     ap.add_argument("--scaled", action="store_true", help="Use pygame.SCALED (not recommended for pixel-exact)")
     ap.add_argument("--nofeedback", action="store_true", help="Disable feedback (Session 2 style)")
     ap.add_argument("--lsl", action="store_true", help="Enable LSL marker stream")
@@ -400,7 +412,7 @@ def main():
     # Pygame display
     os.environ.setdefault("SDL_HINT_VIDEO_HIGHDPI_DISABLED", "0")
     pygame.init()
-    pygame.key.set_repeat(0)  # no auto-repeat
+    pygame.key.set_repeat(0)
 
     if args.scaled:
         screen = pygame.display.set_mode(
@@ -419,38 +431,51 @@ def main():
     W,H = screen.get_size()
     print("Window size:", (W,H), "| Desktop mode:", (pygame.display.Info().current_w, pygame.display.Info().current_h))
 
+    # config objects
     task   = TaskConfig(freq_hz=args.freq, cycles=args.cycles, show_feedback=not args.nofeedback)
     stimcf = StimulusConfig()
+    stimcf.snr_level = args.snr  # <-- fixed SNR from CLI
 
-    # Alternate conditions ABAB… and randomize angle per trial (0° or 90°)
-    conds = ["P", "T"]
-    for t in range(args.trials):
-        # ESC quick exit at block level
-        for e in pygame.event.get():
-            if e.type == pygame.QUIT or (e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE):
-                pygame.quit(); return
+    # Alternate conditions by block: P, T, P, T, ...
+    for b in range(args.blocks):
+        cond = "P" if (b % 2) == 0 else "T"
 
-        cond = conds[t % 2]
-        angle = 0.0 if random.random() < 0.5 else 90.0
+        # Equal angles per block (half 0°, half 90°), shuffled
+        n = args.tperblock
+        angles = [0.0]*(n//2) + [90.0]*(n - n//2)
+        random.shuffle(angles)
 
-        # small jitter (±1–3%) around base SNR level
-        snr_jitter = random.uniform(-0.03, 0.03)
-        seed = random.randrange(1<<30)
+        print(f"\n=== Block {b+1}/{args.blocks}  cond={cond}  trials={n}  base SNR={stimcf.snr_level:.3f} "
+              f"jitter=±{int(args.jitter_min*100)}–{int(args.jitter_max*100)}% ===")
 
-        resp_key, correct, rt_ms, timed_out = run_one_trial(
-            screen, task, stimcf,
-            trial_index=t+1,
-            session_id=session_id,
-            db=db,
-            stim_out_dir=os.path.join(args.stimdir, session_id) if args.stimdir else None,
-            outlet=outlet,
-            cond=cond, angle_deg=angle, snr_jitter=snr_jitter, seed=seed,
-            use_debug_overlay=args.debug
-        )
+        for i in range(n):
+            # quick escape at block level
+            for e in pygame.event.get():
+                if e.type == pygame.QUIT or (e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE):
+                    pygame.quit(); return
 
-        print(f"trial {t+1:03d} ses={session_id} cond={cond} angle={angle:.1f} "
-              f"resp={'L' if resp_key==pygame.K_LEFT else 'R' if resp_key==pygame.K_RIGHT else '—'} "
-              f"correct={int(correct)} rt={rt_ms} timeout={int(timed_out)}")
+            angle = angles[i]
+
+            # jitter like in the paper: per-trial absolute ±1–3% (default)
+            snr_jitter = sample_abs_jitter(args.jitter_min, args.jitter_max)
+
+            seed = random.randrange(1<<30)
+
+            trial_index = b * args.tperblock + i + 1
+            resp_key, correct, rt_ms, timed_out = run_one_trial(
+                screen, task, stimcf,
+                trial_index=trial_index,
+                session_id=session_id,
+                db=db,
+                stim_out_dir=os.path.join(args.stimdir, session_id) if args.stimdir else None,
+                outlet=outlet,
+                cond=cond, angle_deg=angle, snr_jitter=snr_jitter, seed=seed,
+                use_debug_overlay=args.debug
+            )
+
+            print(f"trial {trial_index:03d} block={b+1} cond={cond} angle={angle:.0f} "
+                  f"resp={'L' if resp_key==pygame.K_LEFT else 'R' if resp_key==pygame.K_RIGHT else '—'} "
+                  f"correct={int(correct)} rt={rt_ms} timeout={int(timed_out)}")
 
     pygame.quit()
 
