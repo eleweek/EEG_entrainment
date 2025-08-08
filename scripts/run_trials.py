@@ -1,9 +1,13 @@
 # run_trials.py
 from __future__ import annotations
-import argparse, enum, random, time, os
+import argparse, enum, random, time, os, sqlite3, hashlib, json, uuid
 from dataclasses import dataclass
+from typing import Optional
 
 import pygame
+
+from pylsl import StreamInfo, StreamOutlet, local_clock
+
 
 from flicker import run_flicker          # your pulse-train function
 from glass   import draw_glass           # your Glass generator (draws onto a Surface)
@@ -44,8 +48,9 @@ class Phase(enum.Enum):
 
 # ============================ Small drawing helpers ===========================
 
-def draw_fixation(screen: pygame.Surface, center: tuple[int,int], color=(120, 120, 120)):
-    radius_px = 5
+FIX_COLOR = (120, 120, 120)   # neutral mid-gray
+
+def draw_fixation_dot(screen: pygame.Surface, center: tuple[int,int], radius_px=5, color=FIX_COLOR):
     pygame.draw.circle(screen, color, center, radius_px)
 
 def glyph_tick(screen, c):
@@ -61,6 +66,101 @@ def build_centered_rect(center: tuple[int,int], side: int) -> pygame.Rect:
     cx, cy = center
     return pygame.Rect(cx - side//2, cy - side//2, side, side)
 
+# ============================ SQLite helpers =================================
+
+SCHEMA = """
+PRAGMA journal_mode=WAL;
+PRAGMA synchronous=NORMAL;
+CREATE TABLE IF NOT EXISTS session(
+  id TEXT PRIMARY KEY,
+  participant_id TEXT,
+  start_ts REAL,
+  iaf_hz REAL,
+  notes TEXT
+);
+CREATE TABLE IF NOT EXISTS stimulus(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  hash TEXT UNIQUE,
+  file_path TEXT,
+  angle_deg REAL,
+  snr_level REAL,
+  snr_jitter REAL,
+  density REAL,
+  shift_px REAL,
+  dot_r_px INTEGER,
+  handed TEXT,
+  seed INTEGER
+);
+CREATE TABLE IF NOT EXISTS trial(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT,
+  trial_index INTEGER,
+  cond TEXT,
+  delay_cycles REAL,
+  angle_deg REAL,
+  snr_level REAL,
+  snr_jitter REAL,
+  seed INTEGER,
+  resp_key TEXT,
+  correct INTEGER,
+  rt_ms INTEGER,
+  timed_out INTEGER,
+  stim_id INTEGER,
+  ts_onset REAL,
+  ts_resp REAL
+);
+"""
+
+def open_db(path: str) -> sqlite3.Connection:
+    db = sqlite3.connect(path, isolation_level=None)
+    db.executescript(SCHEMA)
+    return db
+
+def sha256_bytes(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+def ensure_png(surface: pygame.Surface, out_dir: str, h: str) -> str:
+    os.makedirs(out_dir, exist_ok=True)
+    fn = os.path.join(out_dir, f"{h}.png")
+    if not os.path.exists(fn):
+        pygame.image.save(surface, fn)
+    return fn
+
+def upsert_stimulus(db: sqlite3.Connection, meta: dict) -> int:
+    db.execute("""INSERT OR IGNORE INTO stimulus(hash,file_path,angle_deg,snr_level,snr_jitter,
+                  density,shift_px,dot_r_px,handed,seed)
+                  VALUES(:hash,:file_path,:angle_deg,:snr_level,:snr_jitter,
+                         :density,:shift_px,:dot_r_px,:handed,:seed)""", meta)
+    row = db.execute("SELECT id FROM stimulus WHERE hash=?", (meta["hash"],)).fetchone()
+    return row[0]
+
+def insert_trial(db: sqlite3.Connection, row: dict) -> int:
+    db.execute("""INSERT INTO trial(session_id,trial_index,cond,delay_cycles,angle_deg,
+                 snr_level,snr_jitter,seed,resp_key,correct,rt_ms,timed_out,stim_id,ts_onset,ts_resp)
+                 VALUES(:session_id,:trial_index,:cond,:delay_cycles,:angle_deg,
+                        :snr_level,:snr_jitter,:seed,:resp_key,:correct,:rt_ms,:timed_out,:stim_id,:ts_onset,:ts_resp)""", row)
+    return db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+# ============================ LSL helpers ====================================
+
+def make_marker_outlet(stream_name="GlassMarkers") -> Optional[StreamOutlet]:
+    if StreamInfo is None or StreamOutlet is None:
+        print("[LSL] pylsl not available; continuing without LSL.")
+        return None
+    info = StreamInfo(name=stream_name, type='Markers',
+                      channel_count=1, nominal_srate=0,
+                      channel_format='string',
+                      source_id=f'glass-{uuid.uuid4()}')
+    return StreamOutlet(info)
+
+def push_marker(outlet: Optional[StreamOutlet], ev: str, **fields) -> float:
+    ts = local_clock()
+    if outlet is not None:
+        payload = {"ev": ev, "ts": ts}
+        payload.update(fields)
+        outlet.push_sample([json.dumps(payload)], timestamp=ts)
+    return ts
+
 # ============================ Trial runner (FSM) ==============================
 
 def run_one_trial(
@@ -68,8 +168,13 @@ def run_one_trial(
     task: TaskConfig,
     stimcfg: StimulusConfig,
     *,
+    trial_index: int,
+    session_id: str,
+    db: Optional[sqlite3.Connection],
+    stim_out_dir: Optional[str],
+    outlet: Optional[StreamOutlet],
     cond: str,                     # "P" or "T"
-    angle_deg: float,              # 0.0 (concentric) or 90.0 (radial) or anything in between
+    angle_deg: float,              # 0.0 / 90.0 or anything 0..90
     snr_jitter: float,             # e.g., uniform(-0.03, +0.03)
     seed: int,
     use_debug_overlay: bool=False
@@ -81,19 +186,20 @@ def run_one_trial(
     flicker_rect  = build_centered_rect(center_screen, stimcfg.flicker_side_px)
     aperture_rect = build_centered_rect(center_screen, stimcfg.aperture_side_px)
 
-    # Pre-render the Glass stimulus during ITI / setup
+    # Pre-render the Glass stimulus during setup
     stim = pygame.Surface(aperture_rect.size)
     stim.fill((0,0,0))
+    snr_trial = stimcfg.snr_level + snr_jitter
     draw_glass(
         stim, center=(aperture_rect.w//2, aperture_rect.h//2), size=aperture_rect.w,
-        angle_deg=angle_deg,
-        snr=stimcfg.snr_level + snr_jitter,
-        density=stimcfg.density,
-        shift=stimcfg.shift_px,
-        dot_r=stimcfg.dot_r_px,
-        handed=stimcfg.handed,
-        seed=seed,
+        angle_deg=angle_deg, snr=snr_trial, density=stimcfg.density,
+        shift=stimcfg.shift_px, dot_r=stimcfg.dot_r_px, handed=stimcfg.handed, seed=seed
     )
+
+    # Hash & (later) save PNG
+    rgb_bytes = pygame.image.tostring(stim, "RGB")
+    stim_hash = sha256_bytes(rgb_bytes)
+    stim_path = os.path.join(stim_out_dir, f"{stim_hash}.png") if stim_out_dir else ""
 
     # Ground-truth mapping: LEFT for concentric (0°), RIGHT for radial (90°)
     is_left_correct = (angle_deg == 0.0)
@@ -115,12 +221,16 @@ def run_one_trial(
     response_enabled = False
     rt_ms = -1
 
-    # Prepare static background frame (black)
+    # Draw baseline fixation
     screen.fill((0,0,0))
-    draw_fixation(screen, center_screen)
+    draw_fixation_dot(screen, center_screen)
     pygame.display.flip()
 
-    clock = pygame.time.Clock()
+    # LSL markers: trial header
+    push_marker(outlet, "trial_start", trial=trial_index, cond=cond,
+                angle=angle_deg, snr_level=stimcfg.snr_level, snr_jitter=snr_jitter,
+                seed=seed, delay_cycles=delay_cycles)
+
     running = True
     while running:
         # ---- 1) Events: one poll per frame ----
@@ -133,15 +243,15 @@ def run_one_trial(
                     pygame.quit(); raise SystemExit
                 if e.key == pygame.K_F1:
                     use_debug_overlay = not use_debug_overlay
-
-                # Accept arrows during STIM and RESP phases
                 if e.key in (pygame.K_LEFT, pygame.K_RIGHT) and response_enabled and phase in (Phase.STIM, Phase.RESP):
                     resp_key = e.key
                     rt_ms = int((time.perf_counter() - stim_on_t) * 1000)
                     said_left = (resp_key == pygame.K_LEFT)
                     correct = (said_left == is_left_correct)
                     timed_out = False
-                    # Move straight to feedback; stimulus will be cleared at 200 ms below
+                    response_enabled = False
+                    push_marker(outlet, "response", trial=trial_index,
+                                resp=('L' if said_left else 'R'), correct=bool(correct), rt_ms=rt_ms)
                     phase = Phase.FB
                     fb_deadline = time.perf_counter() + task.feedback_ms/1000.0
 
@@ -149,121 +259,150 @@ def run_one_trial(
 
         # ---- 2) Phase logic ----
         if phase == Phase.FIX:
-            # Draw fixation (already on-screen); advance to FLICK
             phase = Phase.FLICK
 
         elif phase == Phase.FLICK:
-            def _draw_fix_on_off_frames(s: pygame.Surface):
-                draw_fixation(s, center_screen)
-
-            run_flicker(
-                screen, flicker_rect,
-                frequency=task.freq_hz,
-                target_min_refresh_rate=120.0,
-                target_max_refresh_rate=120.0,
-                cycles=task.cycles,
-                report_every=10_000,
-                overlay_off_frame=_draw_fix_on_off_frames,
-            )
+            push_marker(outlet, "flicker_start", trial=trial_index, freq=task.freq_hz, cycles=task.cycles)
+            # keep fixation dot overlayed on OFF frames (optional)
+            def _overlay_off(surf: pygame.Surface):
+                draw_fixation_dot(surf, center_screen)
+            run_flicker(screen, flicker_rect,
+                        frequency=task.freq_hz, target_min_refresh_rate=120.0, target_max_refresh_rate=120.0,
+                        cycles=task.cycles, report_every=10_000, overlay_off_frame=_overlay_off)
+            push_marker(outlet, "flicker_end", trial=trial_index)
             phase = Phase.DELAY
 
         elif phase == Phase.DELAY:
-            # Busy-wait but pump events so window stays responsive
+            push_marker(outlet, "delay_start", trial=trial_index, delay_cycles=delay_cycles)
             target = now + (delay_cycles / task.freq_hz)
             while time.perf_counter() < target and phase == Phase.DELAY:
                 pygame.event.pump()
             phase = Phase.STIM
 
         elif phase == Phase.STIM:
-            # Show stimulus, start the 1.5 s total response window
             screen.fill((0,0,0))
             screen.blit(stim, aperture_rect.topleft)
             if use_debug_overlay:
                 pygame.draw.rect(screen, (0,255,0), flicker_rect, 1)
                 pygame.draw.rect(screen, (255,0,0), aperture_rect, 1)
-                draw_fixation(screen, center_screen, (0,0,255))
+                draw_fixation_dot(screen, center_screen, color=(0,0,255))
 
-            pygame.event.clear() # drop any pre-onset key presses
-            pygame.display.flip() # stimulus appears
+            pygame.event.clear()                   # drop any pre-onset key presses
+            ts_on_req = push_marker(outlet, "stim_onset_req", trial=trial_index,
+                                    angle=angle_deg, snr=snr_trial, stim_hash=stim_hash)
+            pygame.display.flip()                  # stimulus appears
+            push_marker(outlet, "stim_flip_done", trial=trial_index)
 
             stim_on_t = time.perf_counter()
-            response_enabled = True 
-            # total window = 200 ms stimulus + 1.3 s fixation
+            response_enabled = True
+            # total window = 200 ms + 1.3 s
             resp_deadline = stim_on_t + (task.stim_ms + task.resp_extra_ms) / 1000.0
             phase = Phase.RESP
 
         elif phase == Phase.RESP:
-            # Keep stimulus visible for its 200 ms; then blank to fixation until deadline
+            # Keep stimulus visible for 200 ms, then blank to fixation
             if now - stim_on_t >= task.stim_ms/1000.0:
-                # Clear to fixation only once
-                screen.fill((0,0,0))
-                draw_fixation(screen, center_screen)
+                screen.fill((0,0,0)); draw_fixation_dot(screen, center_screen)
                 if use_debug_overlay:
                     pygame.draw.rect(screen, (0,255,0), flicker_rect, 1)
                     pygame.draw.rect(screen, (255,0,0), aperture_rect, 1)
-                    draw_fixation(screen, center_screen, (0,0,255))
+                    draw_fixation_dot(screen, center_screen, color=(0,0,255))
                 pygame.display.flip()
-                # Switch to post-stim response waiting but we remain in Phase.RESP
-                phase = Phase.RESP  # explicit, for clarity
+                # remain in RESP until key or deadline
 
             if now >= resp_deadline and resp_key is None:
-                timed_out = True
-                correct = False
-                rt_ms = -1
-                response_enabled = False
+                timed_out = True; correct = False; rt_ms = -1; response_enabled = False
+                push_marker(outlet, "response", trial=trial_index, resp='none', correct=False, rt_ms=-1, timeout=True)
                 phase = Phase.FB
                 fb_deadline = now + task.feedback_ms/1000.0
 
         elif phase == Phase.FB:
-            response_enabled = False
-            # Show 100 ms feedback (paper showed only after response; you can skip for timeouts)
-            screen.fill((0,0,0))
-            draw_fixation(screen, center_screen)
+            screen.fill((0,0,0)); draw_fixation_dot(screen, center_screen)
             if not timed_out and task.show_feedback:
                 (glyph_tick if correct else glyph_cross)(screen, center_screen)
             pygame.display.flip()
-
             if time.perf_counter() >= fb_deadline:
                 phase = Phase.ITI
                 jitter = random.randint(-task.iti_jitter_ms, task.iti_jitter_ms)
                 iti_deadline = time.perf_counter() + (task.iti_ms + jitter)/1000.0
+                push_marker(outlet, "feedback_end", trial=trial_index)
 
         elif phase == Phase.ITI:
-            # ITI idle; perfect place to save to DB/PNG if you add that later
             if time.perf_counter() >= iti_deadline:
                 running = False
 
-        # ---- 3) Optional debug overlay during FIX (kept simple) ----
+        # Optional debug overlay during FIX
         if use_debug_overlay and phase == Phase.FIX:
             screen.fill((0,0,0))
             pygame.draw.rect(screen, (0,255,0), flicker_rect, 1)
             pygame.draw.rect(screen, (255,0,0), aperture_rect, 1)
-            draw_fixation(screen, center_screen, (0,0,255))
+            draw_fixation_dot(screen, center_screen, color=(0,0,255))
             pygame.display.flip()
 
-        # ---- 4) Frame cap (non-critical) ----
-        pygame.time.delay(1)      # yield a bit
-        # Or: clock.tick(120)
+        pygame.time.delay(1)  # yield
 
+    # ---- After loop: save stimulus PNG & DB rows during ITI slack ----
+    stim_id = None
+    if db is not None:
+        # save PNG if requested
+        if stim_out_dir:
+            stim_path = ensure_png(stim, stim_out_dir, stim_hash)
+        meta = dict(hash=stim_hash, file_path=stim_path, angle_deg=angle_deg, snr_level=stimcfg.snr_level,
+                    snr_jitter=snr_jitter, density=stimcfg.density, shift_px=stimcfg.shift_px,
+                    dot_r_px=stimcfg.dot_r_px, handed=stimcfg.handed, seed=seed)
+        stim_id = upsert_stimulus(db, meta)
+
+        # pull last response marker time if you want (here we use local perf counter deltas)
+        ts_onset = None  # we could store the ts from stim_onset_req if needed—left None here
+        ts_resp  = None
+
+        row = dict(session_id=session_id, trial_index=trial_index, cond=cond,
+                   delay_cycles=delay_cycles, angle_deg=angle_deg, snr_level=stimcfg.snr_level,
+                   snr_jitter=snr_jitter, seed=seed,
+                   resp_key=('L' if resp_key==pygame.K_LEFT else 'R' if resp_key==pygame.K_RIGHT else None),
+                   correct=int(bool(correct)), rt_ms=(rt_ms if rt_ms>=0 else None),
+                   timed_out=int(bool(timed_out)), stim_id=stim_id,
+                   ts_onset=ts_onset, ts_resp=ts_resp)
+        insert_trial(db, row)
+
+    push_marker(outlet, "trial_end", trial=trial_index, correct=bool(correct), timeout=bool(timed_out))
     return resp_key, correct, rt_ms, timed_out
 
 # ============================ CLI / Main =====================================
 
 def main():
-    ap = argparse.ArgumentParser(description="Glass-pattern trials with IAF flicker (FSM).")
+    ap = argparse.ArgumentParser(description="Glass-pattern trials with IAF flicker (FSM) + SQLite + LSL.")
+    ap.add_argument("--participant", type=str, default="sub-01")
+    ap.add_argument("--session", type=str, default=None, help="Session ID (default: auto)")
+    ap.add_argument("--db", type=str, default="study.db", help="SQLite DB path")
+    ap.add_argument("--stimdir", type=str, default="stimuli", help="Directory to save stimulus PNGs")
+    ap.add_argument("--iaf", type=float, default=None, help="Optional IAF (Hz) to store in session metadata")
     ap.add_argument("--freq", type=float, default=10.0, help="Flicker frequency (Hz)")
     ap.add_argument("--cycles", type=int, default=15, help="Number of pulses before target")
     ap.add_argument("--trials", type=int, default=20, help="How many trials to run")
     ap.add_argument("--scaled", action="store_true", help="Use pygame.SCALED (not recommended for pixel-exact)")
+    ap.add_argument("--nofeedback", action="store_true", help="Disable feedback (Session 2 style)")
+    ap.add_argument("--lsl", action="store_true", help="Enable LSL marker stream")
     ap.add_argument("--debug", action="store_true", help="Start with the debug overlay on (F1 toggles)")
     args = ap.parse_args()
 
-    # Enable Hi-DPI backing (macOS) and open native-pixel fullscreen by default
+    # SQLite setup
+    db = open_db(args.db)
+    session_id = args.session or f"ses-{int(time.time())}"
+    db.execute("INSERT OR IGNORE INTO session(id,participant_id,start_ts,iaf_hz,notes) VALUES(?,?,?,?,?)",
+               (session_id, args.participant, time.time(), args.iaf, ""))
+
+    # LSL
+    outlet = make_marker_outlet() if args.lsl else None
+    if outlet is None and args.lsl:
+        print("[LSL] WARNING: --lsl requested but pylsl not available; continuing without markers.")
+
+    # Pygame display
     os.environ.setdefault("SDL_HINT_VIDEO_HIGHDPI_DISABLED", "0")
     pygame.init()
+    pygame.key.set_repeat(0)  # no auto-repeat
 
     if args.scaled:
-        # Convenience mode: looks centered even if desktop res ≠ requested res, but rescales pixels
         screen = pygame.display.set_mode(
             (1920,1080),
             flags=pygame.SCALED | pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE,
@@ -280,12 +419,13 @@ def main():
     W,H = screen.get_size()
     print("Window size:", (W,H), "| Desktop mode:", (pygame.display.Info().current_w, pygame.display.Info().current_h))
 
-    task   = TaskConfig(freq_hz=args.freq, cycles=args.cycles)
+    task   = TaskConfig(freq_hz=args.freq, cycles=args.cycles, show_feedback=not args.nofeedback)
     stimcf = StimulusConfig()
 
     # Alternate conditions ABAB… and randomize angle per trial (0° or 90°)
     conds = ["P", "T"]
     for t in range(args.trials):
+        # ESC quick exit at block level
         for e in pygame.event.get():
             if e.type == pygame.QUIT or (e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE):
                 pygame.quit(); return
@@ -295,17 +435,20 @@ def main():
 
         # small jitter (±1–3%) around base SNR level
         snr_jitter = random.uniform(-0.03, 0.03)
-
         seed = random.randrange(1<<30)
 
         resp_key, correct, rt_ms, timed_out = run_one_trial(
             screen, task, stimcf,
+            trial_index=t+1,
+            session_id=session_id,
+            db=db,
+            stim_out_dir=os.path.join(args.stimdir, session_id) if args.stimdir else None,
+            outlet=outlet,
             cond=cond, angle_deg=angle, snr_jitter=snr_jitter, seed=seed,
             use_debug_overlay=args.debug
         )
 
-        # Minimal console log; plug your SQLite/LSL here if you want
-        print(f"trial {t+1:03d} cond={cond} angle={angle:.1f} "
+        print(f"trial {t+1:03d} ses={session_id} cond={cond} angle={angle:.1f} "
               f"resp={'L' if resp_key==pygame.K_LEFT else 'R' if resp_key==pygame.K_RIGHT else '—'} "
               f"correct={int(correct)} rt={rt_ms} timeout={int(timed_out)}")
 
