@@ -117,8 +117,10 @@ def run_flicker(
                     "err_on_post": err_on_post.summary_dict(),
                 }
 
+        previous_on = rectangle_on
         # 1 frame ON, then N OFF
-        rectangle_on = (frame_count % (off_frames_per_each_on + 1) == 0)
+        # starting from black frames as the first ones sometimes get dropped
+        rectangle_on = (frame_count % (off_frames_per_each_on + 1) == off_frames_per_each_on)
         if rectangle_on:
             pulses_emitted += 1
 
@@ -166,9 +168,10 @@ def run_flicker(
             err_on_post.add(timing_error_post_ms)
 
         if flip_duration_ms > 3.5:
-            print(f'⚠️  Flip too long: {flip_duration_ms:.3f} ms | '
-                  f'Frame {frame_count} | {"ON" if rectangle_on else "OFF"} | '
-                  f'Err pre {timing_error_pre_ms:.3f} ms | Err post {timing_error_post_ms:.3f} ms')
+            if rectangle_on or previous_on:
+                print(f'⚠️  Flip too long: {flip_duration_ms:.3f} ms | '
+                    f'Frame {frame_count} | {"ON" if rectangle_on else "OFF"} | '
+                    f'Err pre {timing_error_pre_ms:.3f} ms | Err post {timing_error_post_ms:.3f} ms')
 
         if frame_count and frame_count % report_every == 0:
             print(f'\n— summary over last {flip_ms.n} frames —')
