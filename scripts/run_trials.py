@@ -1,6 +1,6 @@
 # run_trials.py
 from __future__ import annotations
-import argparse, enum, random, time, os, sqlite3, hashlib, json, uuid
+import argparse, enum, random, time, os, sqlite3, hashlib, json, uuid, statistics
 from dataclasses import dataclass
 from typing import Optional
 
@@ -59,6 +59,69 @@ def glyph_tick(screen, c):
 def glyph_cross(screen, c):
     pygame.draw.line(screen,(200,80,80),(c[0]-10,c[1]-10),(c[0]+10,c[1]+10),3)
     pygame.draw.line(screen,(200,80,80),(c[0]-10,c[1]+10),(c[0]+10,c[1]-10),3)
+
+# ============================ Break screen ====================================
+
+def _render_centered_lines(screen: pygame.Surface, lines: list[str], *, color=(230,230,230)):
+    width, height = screen.get_size()
+    pygame.font.init()
+    # Scale font size with height
+    title_font = pygame.font.SysFont(None, max(36, height // 18))
+    body_font  = pygame.font.SysFont(None, max(28, height // 28))
+
+    rendered = []
+    for idx, text in enumerate(lines):
+        font = title_font if idx == 0 else body_font
+        surf = font.render(text, True, color)
+        rendered.append(surf)
+
+    total_h = sum(s.get_height() for s in rendered) + (len(rendered)-1) * 12
+    y = (height - total_h) // 3  # push a bit upward
+    for surf in rendered:
+        x = (width - surf.get_width()) // 2
+        screen.blit(surf, (x, y))
+        y += surf.get_height() + 12
+
+def show_block_break_screen(
+    screen: pygame.Surface,
+    *,
+    block_number: int,
+    total_blocks: int,
+    condition: str,
+    trials_in_block: int,
+    num_correct: int,
+    num_timeouts: int,
+    mean_rt_ms: float | None,
+):
+    running = True
+    while running:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit(); raise SystemExit
+            if e.type == pygame.KEYDOWN:
+                if e.key == pygame.K_ESCAPE:
+                    pygame.quit(); raise SystemExit
+                if e.key in (pygame.K_SPACE, pygame.K_RETURN):
+                    running = False
+
+        screen.fill((0,0,0))
+
+        accuracy_den = max(1, trials_in_block - num_timeouts)
+        accuracy_pct = 100.0 * (num_correct / accuracy_den)
+        mean_rt_text = (f"{mean_rt_ms:.0f} ms" if mean_rt_ms is not None else "—")
+
+        lines = [
+            f"Block {block_number}/{total_blocks} complete",
+            f"Condition: {condition}    Trials: {trials_in_block}",
+            f"Accuracy (of responses): {accuracy_pct:.1f}%    Timeouts: {num_timeouts}",
+            f"Mean RT: {mean_rt_text}",
+            "",
+            "Take a short break. Blink, relax your eyes.",
+            "Press SPACE when you're ready to continue."
+        ]
+        _render_centered_lines(screen, lines)
+        pygame.display.flip()
+        pygame.time.delay(50)
 
 # ============================ Geometry =======================================
 
@@ -439,6 +502,14 @@ def main():
         print(f"\n=== Block {b+1}/{args.blocks}  cond={cond}  trials={n}  base SNR={stimcf.snr_level:.3f} "
               f"jitter=±{int(args.jitter_min*100)}–{int(args.jitter_max*100)}% ===")
 
+        # LSL marker: block start
+        push_marker(outlet, "block_start", block=b+1, total_blocks=args.blocks, cond=cond, trials=n)
+
+        # Per-block accumulators
+        num_correct_block = 0
+        num_timeouts_block = 0
+        rts_correct_block: list[int] = []
+
         for i in range(n):
             # quick escape at block level
             for e in pygame.event.get():
@@ -467,6 +538,40 @@ def main():
             print(f"trial {trial_index:03d} block={b+1} cond={cond} angle={angle:.0f} "
                   f"resp={'L' if resp_key==pygame.K_LEFT else 'R' if resp_key==pygame.K_RIGHT else '—'} "
                   f"correct={int(correct)} rt={rt_ms} timeout={int(timed_out)}")
+
+            # Update per-block stats
+            if timed_out:
+                num_timeouts_block += 1
+            else:
+                if correct:
+                    num_correct_block += 1
+                    if rt_ms is not None and rt_ms >= 0:
+                        rts_correct_block.append(rt_ms)
+
+        # Compute per-block summary
+        accuracy_pct = 100.0 * num_correct_block / n
+        mean_rt_ms = (statistics.fmean(rts_correct_block) if rts_correct_block else None)
+
+        # LSL marker: block end summary
+        push_marker(
+            outlet, "block_end",
+            block=b+1, total_blocks=args.blocks, cond=cond, trials=n,
+            correct=num_correct_block, timeouts=num_timeouts_block,
+            accuracy_pct=round(accuracy_pct, 2),
+            mean_rt_ms=(round(mean_rt_ms, 1) if mean_rt_ms is not None else None)
+        )
+
+        # On-screen break screen
+        show_block_break_screen(
+            screen,
+            block_number=b+1,
+            total_blocks=args.blocks,
+            condition=cond,
+            trials_in_block=n,
+            num_correct=num_correct_block,
+            num_timeouts=num_timeouts_block,
+            mean_rt_ms=mean_rt_ms,
+        )
 
     pygame.quit()
 
