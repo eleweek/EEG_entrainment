@@ -268,7 +268,7 @@ def run_one_trial(
             def _overlay_off(surf: pygame.Surface):
                 draw_fixation_dot(surf, center_screen)
             run_flicker(screen, flicker_rect,
-                        frequency=task.freq_hz, target_min_refresh_rate=120.0, target_max_refresh_rate=120.0,
+                        frequency=task.freq_hz, target_min_refresh_rate=80.0, target_max_refresh_rate=125.0,
                         cycles=task.cycles, report_every=10_000, overlay_off_frame=_overlay_off)
             push_marker(outlet, "flicker_end", trial=trial_index)
             phase = Phase.DELAY
