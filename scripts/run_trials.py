@@ -392,7 +392,6 @@ def main():
     ap.add_argument("--jitter-min", type=float, default=0.01, help="Min absolute jitter (e.g., 0.01 = 1%%)")
     ap.add_argument("--jitter-max", type=float, default=0.03, help="Max absolute jitter (e.g., 0.03 = 3%%)")
 
-    ap.add_argument("--scaled", action="store_true", help="Use pygame.SCALED (not recommended for pixel-exact)")
     ap.add_argument("--nofeedback", action="store_true", help="Disable feedback (Session 2 style)")
     ap.add_argument("--lsl", action="store_true", help="Enable LSL marker stream")
     ap.add_argument("--debug", action="store_true", help="Start with the debug overlay on (F1 toggles)")
@@ -414,19 +413,11 @@ def main():
     pygame.init()
     pygame.key.set_repeat(0)
 
-    if args.scaled:
-        screen = pygame.display.set_mode(
-            (1920,1080),
-            flags=pygame.SCALED | pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE,
-            vsync=1
-        )
-    else:
-        native_w, native_h = pygame.display.list_modes()[0]
-        screen = pygame.display.set_mode(
-            (native_w, native_h),
-            flags=pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE,
-            vsync=1
-        )
+    screen = pygame.display.set_mode(
+        (1920,1080),
+        flags=pygame.SCALED | pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE,
+        vsync=1
+    )
 
     W,H = screen.get_size()
     print("Window size:", (W,H), "| Desktop mode:", (pygame.display.Info().current_w, pygame.display.Info().current_h))
