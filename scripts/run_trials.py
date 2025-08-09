@@ -62,7 +62,7 @@ def glyph_cross(screen, c):
 
 # ============================ Break screen ====================================
 
-def _render_centered_lines(screen: pygame.Surface, lines: list[str], *, color=(230,230,230)):
+def _render_text_lines(screen: pygame.Surface, lines: list[str], *, color=(230,230,230)):
     width, height = screen.get_size()
     pygame.font.init()
     # Scale font size with height
@@ -75,12 +75,18 @@ def _render_centered_lines(screen: pygame.Surface, lines: list[str], *, color=(2
         surf = font.render(text, True, color)
         rendered.append(surf)
 
-    total_h = sum(s.get_height() for s in rendered) + (len(rendered)-1) * 12
-    y = (height - total_h) // 3  # push a bit upward
+    # Compute block size (max width among lines; total height with spacing)
+    line_spacing = 12
+    total_h = sum(s.get_height() for s in rendered) + (len(rendered)-1) * line_spacing
+    block_w = max((s.get_width() for s in rendered), default=0)
+
+    # Center the block while keeping lines left-aligned within the block
+    x = (width - block_w) // 2
+    y = (height - total_h) // 2
+
     for surf in rendered:
-        x = (width - surf.get_width()) // 2
         screen.blit(surf, (x, y))
-        y += surf.get_height() + 12
+        y += surf.get_height() + line_spacing
 
 def show_block_break_screen(
     screen: pygame.Surface,
@@ -111,15 +117,15 @@ def show_block_break_screen(
         mean_rt_text = (f"{mean_rt_ms:.0f} ms" if mean_rt_ms is not None else "—")
 
         lines = [
-            f"Block {block_number}/{total_blocks} complete",
+            f"{block_number}/{total_blocks} blocks completed",
             f"Condition: {condition}    Trials: {trials_in_block}",
-            f"Accuracy (of responses): {accuracy_pct:.1f}%    Timeouts: {num_timeouts}",
+            f"Accuracy: {accuracy_pct:.1f}%    Timeouts: {num_timeouts}",
             f"Mean RT: {mean_rt_text}",
             "",
             "Take a short break. Blink, relax your eyes.",
             "Press SPACE when you're ready to continue."
         ]
-        _render_centered_lines(screen, lines)
+        _render_text_lines(screen, lines)
         pygame.display.flip()
         pygame.time.delay(50)
 
