@@ -240,7 +240,10 @@ def main():
     ax.set_xlabel("Within-condition exposure index (k)")
     ax.set_ylabel("Block accuracy (proportion correct)")
     ax.set_xlim(left=0.5)
-    ax.set_ylim(0.0, 1.0)
+    y_min = float(df["acc"].min())
+    y_max = float(df["acc"].max())
+    pad = 0.02
+    ax.set_ylim(max(0.0, y_min - pad), min(1.0, y_max + pad))
     ax.set_title(args.title)
     ax.grid(True, alpha=0.25)
     ax.legend(frameon=False)
