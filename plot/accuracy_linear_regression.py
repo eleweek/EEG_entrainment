@@ -235,7 +235,7 @@ def main():
         res, curve = fits[cond]
         if res is None or curve.empty: continue
         ax.plot(curve["k"], curve["mean"], lw=3, color=palette[cond], label=f"{cond} linear fit")
-        ax.fill_between(curve["k"], curve["lo"], curve["hi"], color=palette[cond], alpha=0.15, linewidth=0)
+        
 
     ax.set_xlabel("Within-condition exposure index (k)")
     ax.set_ylabel("Block accuracy (proportion correct)")
@@ -246,6 +246,9 @@ def main():
     ax.set_ylim(max(0.0, y_min - pad), min(1.0, y_max + pad))
     ax.set_title(args.title)
     ax.grid(True, alpha=0.25)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.tick_params(axis="both", which="both", length=0)
     ax.legend(frameon=False)
 
     plt.tight_layout()
