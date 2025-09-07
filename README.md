@@ -46,7 +46,7 @@ I don't think it makes sense to speculate much here given n=1 and difference fro
 
 ## Software components
 
-There is a number of other scripts potentially useful in exploring the data. Some of them are documented below.
+Aside from running the full replication pipeline via the above instructions, there is a way to run some of its individual components individually with scripts. There is also a number of utility scripts. Some of these are documented below.
 
 ### Working with EEG recordings
 
