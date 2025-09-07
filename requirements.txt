@@ -11,6 +11,7 @@ debugpy==1.8.1
 decorator==5.1.1
 executing==2.0.1
 fonttools==4.50.0
+glfw==2.9.0
 idna==3.6
 ipykernel==6.29.3
 ipython==8.22.2
@@ -190,6 +191,8 @@ pyobjc-framework-VideoToolbox==10.3.1
 pyobjc-framework-Virtualization==10.3.1
 pyobjc-framework-Vision==10.3.1
 pyobjc-framework-WebKit==10.3.1
+pyobjus==1.2.3
+PyOpenGL==3.1.9
 pyparsing==3.1.2
 PyQt6==6.6.1
 PyQt6-Qt6==6.6.3
