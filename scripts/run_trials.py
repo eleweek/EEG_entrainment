@@ -30,7 +30,7 @@ class TaskConfig:
 @dataclass
 class StimulusConfig:
     aperture_side_px: int = 412           # ~7.9° in your earlier example
-    flicker_side_px: int = 600            # square pulse patch
+    flicker_side_px: int = 412            # square pulse patch
     dot_r_px: int = 1                     # 2 px diameter
     shift_px: int = 14                    # ~16.2' at your ppd
     density: float = 0.03
