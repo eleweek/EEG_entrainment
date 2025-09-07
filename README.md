@@ -2,17 +2,18 @@
 
 This is the code for the [ACX Grants (2024)](https://www.astralcodexten.com/p/acx-grants-results-2024) EEG entrainment project replicating the study [“Learning at your brain’s rhythm: individualized entrainment boosts learning for perceptual decisions”](https://pubmed.ncbi.nlm.nih.gov/36352510/). In this study, a team at Cambridge claims that entrainment (flashing a bright white light) at a person's individual peak alpha frequency helps them learn to perform a certain difficult perceptual task faster. The task is discriminating between two types of Signal-in-noise patterns between each other: radial ones and concentric ones. 
 
-![](https://i.imgur.com/aCqWxTz.png)
+<img width="264" height="277" alt="image" src="https://github.com/user-attachments/assets/5f3b8fd1-ed8f-4bec-ad45-b834c81eb6d0" />
+
 
 The “stimulus prototypes” are easy to tell apart. The ones used in the study are Signal-in-noise ones. They  are much harder to distinguish — when you have 200 ms to do so. You have the ability to run the code yourself. 
 
-If you are in London and want to volunteer for the actual replication. If you are volunteering, please don't run this code: I'll be excluding people who have done too many patterns. 
+If you are in London and want to volunteer for the actual replication. If you are volunteering, please don't run code that display stimuli: I'll be excluding people who have done too many patterns. 
 
 ## Replication in London
 
 I will be running a study replication in London on 10 participants from mid-September until mid-October. 
 
-The location will be either Newspeak House (aka the London College of Political Technology) or another venue in Bethnal Green — based on your preference and each of the venue’s availability. The total time commitment is 4 hours (2 hours on two different days).
+The location will be either Newspeak House (aka the London College of Political Technology) or another venue in Bethnal Green — based on your preference and each of the venue’s availability. The total time commitment is 4 hours (2 hours on two consecutive days).
 
 [Sign up to be a volunteer](https://forms.gle/X37zyTV3KhbSb3Ze9) — your help will be greatly appreciated.
 
@@ -22,8 +23,26 @@ The location will be either Newspeak House (aka the London College of Political 
 2. Monitor: LG UltraGear 24GQ50F 1920×1080 with AMD FreeSync (AMD's VSync) 48..165 Hz.
 
 ## Running your own replication
-1. Record EEG from your headset, `python3 -m plot.alpha --picks O1,Oz,O2,Oz eo2.xdf`. Use your own occipital electrodes instead of O1,Oz,O2.  
-2. `python3 run_trials.py --stimdir stimdir --db test.db --tperblock <trials per block> --blocks <blocks count> --freq <entrainment frequency> --participant participant name`. This will run trials for the P condition and the T condition of the study interleaving them. Currently the code hardcodes parameters for a VBR monitor with a variable refresh rates spanning at least 60..144. In principle you can make the code work with a fixed refresh rate with relatively small amount of modifications — but I haven't tried this as using variable refresh rates allows to hit precise flicker timing. 
+
+Right now the code is more suited for a demo of a replication and testing the pipeline, rather than easily running a full replication with a few bash commands. There is still a bit of work remaining for this: unhardcoding some constants and surfacing them as command-line arguments as well as making it easier to do double blinding.
+
+Currently you can easily compute IAF and then run blocks of T-match and P-match trials interleaving them — this is different from what the paper did, but much more useful for doing sanity checks on the code and verifying that your setup works.
+
+0. Run `python3 scripts/eo_eeg_screen.py` to display a fixation screen for the EEG recording (it should be recorded with open eyes).  
+1. Record EEG from your headset using e.g. [Labrecorder](https://github.com/labstreaminglayer/App-LabRecorder)
+2. `python3 -m plot.alpha --picks O1,Oz,O2,Oz <your recording file>`. Use whatever occipital electrodes you have available instead of O1,Oz,O2.  
+3. `python3 run_trials.py --stimdir <directory where to save the stimuli patterns> --db study.db --tperblock <trials per block> --blocks <blocks count> --freq <entrainment frequency> --participant participant name`. This will run trials for the P condition and the T condition of the study interleaving them. The results of trials will be recorded in the `study.db`. Currently the code hardcodes parameters necessary for a VRR monitor with a variable refresh rate spanning at least 60..144. In principle you can make the code work with a fixed refresh rate with relatively small amount of modifications — but I haven't tried this, because using VRR allows for a much more precise flicker timing.
+4. Plot linear regression of the accuracy and estimate a learning rate: `python3 plot/accuracy_linear_regression.py` to plot estimates of the learning rate (with interleaved blocks). Use `--exclude` if you want to exclude some blocks (for reasons such as burn-in, too much distractions in the environment, bugs in the modified code, etc).
+
+You can use `SDL_VIDEO_WINDOW_POS` environment variable to target a specific monitor in your multi-monitor setup. E.g. `SDL_VIDEO_WINDOW_POS='1920,1'` displays on the second monitor for me.
+
+### Early signs of the replicated effect
+
+<img width="487" height="293" alt="image" src="https://github.com/user-attachments/assets/2ffa4b40-c302-4365-bbb7-a69a30ad6677" />
+
+After doing the above procedure, I got my learning rate chart (stitched from multiple days). My average accuracy in the T-match condition was 64% vs only 58% in the P-match condition. I also felt like I was subjectively 'learning more' in the T-match condition. Somehow it seems that the learning rate was higher in the P-match condition than the T-match condition — the opposite of what one might predict from looking at the paper. However, we are interleaving blocks here and most of the learning could've still happened in the T-match condition (maybe I first learned to do easier patterns faster and more reliably which carried over to the next P blocks). Or maybe the data is just noisy. 
+
+I don't think it makes sense to speculate much here — it's time to collect the actual data under conditions of the original study. If you are in London, consider [signing up to be a volunteer](https://forms.gle/X37zyTV3KhbSb3Ze9)
 
 ## Software components
 
