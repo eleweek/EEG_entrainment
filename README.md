@@ -1,13 +1,33 @@
 # EEG entrainment study replication
 
-TODO: fill in the project description section
+This is the code for the [ACX Grants (2024)](https://www.astralcodexten.com/p/acx-grants-results-2024) EEG entrainment project replicating the study [“Learning at your brain’s rhythm: individualized entrainment boosts learning for perceptual decisions”](https://pubmed.ncbi.nlm.nih.gov/36352510/). In this study, a team at Cambridge claims that entrainment (flashing a bright white light) at a person's individual peak alpha frequency helps them learn to perform a certain difficult perceptual task faster. The task is discriminating between two types of Signal-in-noise patterns between each other: radial ones and concentric ones. 
 
-## Replication Hardware
+![](https://i.imgur.com/aCqWxTz.png)
+
+The “stimulus prototypes” are easy to tell apart. The ones used in the study are Signal-in-noise ones. They  are much harder to distinguish — when you have 200 ms to do so. You have the ability to run the code yourself. 
+
+If you are in London and want to volunteer for the actual replication. If you are volunteering, please don't run this code: I'll be excluding people who have done too many patterns. 
+
+## Replication in London
+
+I will be running a study replication in London on 10 participants from mid-September until mid-October. 
+
+The location will be either Newspeak House (aka the London College of Political Technology) or another venue in Bethnal Green — based on your preference and each of the venue’s availability. The total time commitment is 4 hours (2 hours on two different days).
+
+[Sign up to be a volunteer](https://forms.gle/X37zyTV3KhbSb3Ze9) — your help will be greatly appreciated.
+
+### London Replication Hardware
 
 1. EEG Headset: [OpenBCI Ultracortex "Mark IV" EEG Headset](https://shop.openbci.com/products/ultracortex-mark-iv) with [8-channel Cyton Board](https://shop.openbci.com/products/cyton-biosensing-board-8-channel) and [ThinkPulse Active Electrodes](https://shop.openbci.com/products/thinkpulse-active-electrode-8-channel-starter-kit). Current electrodes: Fp1, Fp2, Fz, C4, Pz, O1, Oz, O2
-2. Monitor: LG UltraGear 24GQ50F 1920×1080 with AMD FreeSync (AMD's VSync) 48..165 Hz. Available fixed refresh rates: 165 Hz, 144 Hz, 120 Hz, 100 Hz, 60 Hz, 50 Hz. Potentially overclocks to 180 Hz — [here is the page that claims it, but maybe it's a different version, my box doesn't have the -B suffix](https://www.lg.com/uk/monitors/gaming/24gq50f-b/)
+2. Monitor: LG UltraGear 24GQ50F 1920×1080 with AMD FreeSync (AMD's VSync) 48..165 Hz.
+
+## Running your own replication
+1. Record EEG from your headset, `python3 -m plot.alpha --picks O1,Oz,O2,Oz eo2.xdf`. Use your own occipital electrodes instead of O1,Oz,O2.  
+2. `python3 run_trials.py --stimdir stimdir --db test.db --tperblock <trials per block> --blocks <blocks count> --freq <entrainment frequency> --participant participant name`. This will run trials for the P condition and the T condition of the study interleaving them. Currently the code hardcodes parameters for a VBR monitor with a variable refresh rates spanning at least 60..144. In principle you can make the code work with a fixed refresh rate with relatively small amount of modifications — but I haven't tried this as using variable refresh rates allows to hit precise flicker timing. 
 
 ## Software components
+
+There is a number of other scripts potentially useful in exploring the data. Some of them are documented below.
 
 ### Working with recordings
 
@@ -31,7 +51,7 @@ TODO: fill in the project description section
 
 1. `python3 subject_stimulus_scripts/Glass_images/create_glass_images.py --radial --snr 0.5` to generate a radial image with the signal-to-noise ratio of 0.5. Replace `--radial` with `--concentric` for concetric images.
 
-### Flicker code
+### Running flicker code individually
 
 `python3 scripts/flicker.py --flicker-frequency 11 --target-min-refresh-rate 60 --target-max-refresh-rate 120  `
 
