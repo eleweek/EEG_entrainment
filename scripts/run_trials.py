@@ -467,7 +467,7 @@ def main():
 
     # --- NEW: block design & SNR/jitter control ---
     ap.add_argument("--blocks", type=int, default=6, help="Number of blocks")
-    ap.add_argument("--tperblock", type=int, default=60, help="Trials per block")
+    ap.add_argument("--tperblock", type=int, default=100, help="Trials per block")
     ap.add_argument("--snr", type=float, default=0.24, help="Base SNR (signal proportion)")
     ap.add_argument("--jitter-min", type=float, default=0.01, help="Min absolute jitter (e.g., 0.01 = 1%%)")
     ap.add_argument("--jitter-max", type=float, default=0.03, help="Max absolute jitter (e.g., 0.03 = 3%%)")
