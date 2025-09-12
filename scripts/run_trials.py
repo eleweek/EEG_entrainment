@@ -457,24 +457,22 @@ def sample_abs_jitter(min_abs: float, max_abs: float) -> float:
 
 def main():
     ap = argparse.ArgumentParser(description="Glass-pattern trials with IAF flicker (FSM) + SQLite + LSL.")
-    ap.add_argument("--participant", type=str, default="sub-01")
+    ap.add_argument("--participant", type=str, required=True)
     ap.add_argument("--session", type=str, default=None, help="Session ID (default: auto)")
     ap.add_argument("--db", type=str, default="study.db", help="SQLite DB path")
     ap.add_argument("--stimdir", type=str, default="stimuli", help="Directory to save stimulus PNGs")
 
-    ap.add_argument("--iaf", type=float, default=None, help="Optional IAF (Hz) to store in session metadata")
-    ap.add_argument("--freq", type=float, default=10.0, help="Flicker frequency (Hz)")
+    ap.add_argument("--iaf", type=float, required=True, help="IAF (in Hz) to store in session metadata")
+    ap.add_argument("--freq", type=float, required=True, help="Flicker frequency (Hz)")
     ap.add_argument("--cycles", type=int, default=15, help="Number of pulses before target")
 
-    # --- NEW: block design & SNR/jitter control ---
-    ap.add_argument("--blocks", type=int, default=6, help="Number of blocks")
+    ap.add_argument("--blocks", type=int, default=8, help="Number of blocks")
     ap.add_argument("--tperblock", type=int, default=100, help="Trials per block")
     ap.add_argument("--snr", type=float, default=0.24, help="Base SNR (signal proportion)")
     ap.add_argument("--jitter-min", type=float, default=0.01, help="Min absolute jitter (e.g., 0.01 = 1%%)")
     ap.add_argument("--jitter-max", type=float, default=0.03, help="Max absolute jitter (e.g., 0.03 = 3%%)")
 
-    # --- NEW: condition scheduling & blinding ---
-    ap.add_argument("--condition", choices=["alt","P","T","seq"], default="alt",
+    ap.add_argument("--condition", choices=["alt", "P", "T", "seq"], default="alt",
                     help="Block schedule: alt (alternate P/T), P (all peak), T (all trough), seq (use --cond-seq)")
     ap.add_argument("--cond-seq", type=parse_cond_seq, default=None,
                     help="Sequence of conditions for blocks when --condition=seq, e.g. 'PTTP' (repeats as needed)")
