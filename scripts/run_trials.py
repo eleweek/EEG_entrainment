@@ -472,12 +472,14 @@ def main():
     ap.add_argument("--jitter-min", type=float, default=0.01, help="Min absolute jitter (e.g., 0.01 = 1%%)")
     ap.add_argument("--jitter-max", type=float, default=0.03, help="Max absolute jitter (e.g., 0.03 = 3%%)")
 
-    ap.add_argument("--condition", choices=["alt", "P", "T", "seq"], default="alt",
-                    help="Block schedule: alt (alternate P/T), P (all peak), T (all trough), seq (use --cond-seq)")
+    # Make blinding mutually exclusive with explicit condition scheduling
+    mx = ap.add_mutually_exclusive_group(required=True)
+    mx.add_argument("--condition", choices=["alt", "P", "T", "seq"], default="alt",
+                    help="Block schedule: alt (alternate P/T), P (all peak), T (all trough), seq (use --cond-seq). Mutually exclusive with --blind-key.")
+    mx.add_argument("--blind-key", type=str, default=None,
+                    help="Enable blinding: hash this secret string to pick session condition (applies to all blocks). Mutually exclusive with --condition/--cond-seq.")
     ap.add_argument("--cond-seq", type=parse_cond_seq, default=None,
                     help="Sequence of conditions for blocks when --condition=seq, e.g. 'PTTP' (repeats as needed)")
-    ap.add_argument("--blind-key", type=str, default=None,
-                    help="Simple blinding: hash this secret string to pick session condition (applies to all blocks)")
     ap.add_argument("--blind-session", type=int, choices=[1,2], default=1,
                     help="If using --blind-key, set 1 for first run and 2 for second run (flips condition)")
 
@@ -485,6 +487,12 @@ def main():
     ap.add_argument("--lsl", action="store_true", help="Enable LSL marker stream")
     ap.add_argument("--debug", action="store_true", help="Start with the debug overlay on (F1 toggles)")
     args = ap.parse_args()
+
+    # Explicit incompatibility: --cond-seq cannot be combined with blinding
+    # In principle, this shouldn't be difficult to make this work, but it'd require extra testing
+    # Prohibiting explicitly for simplicity
+    if args.blind_key and args.cond_seq:
+        ap.error("--cond-seq cannot be used together with --blind-key. Choose either blinding or explicit scheduling.")
 
     # SQLite setup
     db = open_db(args.db)
