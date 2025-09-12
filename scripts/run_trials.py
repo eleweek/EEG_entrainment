@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS session(
   participant_id TEXT,
   start_ts REAL,
   iaf_hz REAL,
+  flicker_freq_hz REAL,
   notes TEXT
 );
 CREATE TABLE IF NOT EXISTS stimulus(
@@ -497,8 +498,8 @@ def main():
     # SQLite setup
     db = open_db(args.db)
     session_id = args.session or f"ses-{int(time.time())}"
-    db.execute("INSERT OR IGNORE INTO session(id,participant_id,start_ts,iaf_hz,notes) VALUES(?,?,?,?,?)",
-               (session_id, args.participant, time.time(), args.iaf, ""))
+    db.execute("INSERT OR IGNORE INTO session(id,participant_id,start_ts,iaf_hz,flicker_freq_hz,notes) VALUES(?,?,?,?,?,?)",
+               (session_id, args.participant, time.time(), args.iaf, args.freq, ""))
 
     # LSL
     outlet = make_marker_outlet() if args.lsl else None
