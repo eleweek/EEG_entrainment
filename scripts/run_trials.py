@@ -60,6 +60,17 @@ def glyph_cross(screen, c):
     pygame.draw.line(screen,(200,80,80),(c[0]-10,c[1]-10),(c[0]+10,c[1]+10),3)
     pygame.draw.line(screen,(200,80,80),(c[0]-10,c[1]+10),(c[0]+10,c[1]-10),3)
 
+# ============================ Argparse validators =============================
+
+def parse_cond_seq(value: str) -> str:
+    v = (value or "").strip().upper()
+    if not v:
+        raise argparse.ArgumentTypeError("--cond-seq must be a non-empty string of P/T, e.g. 'PTTP'")
+    invalid = [ch for ch in v if ch not in ("P", "T")]
+    if invalid:
+        raise argparse.ArgumentTypeError("--cond-seq may only contain 'P' and 'T'")
+    return v
+
 # ============================ Break screen ====================================
 
 def _render_text_lines(screen: pygame.Surface, lines: list[str], *, color=(230,230,230)):
@@ -455,11 +466,21 @@ def main():
     ap.add_argument("--cycles", type=int, default=15, help="Number of pulses before target")
 
     # --- NEW: block design & SNR/jitter control ---
-    ap.add_argument("--blocks", type=int, default=6, help="Number of blocks (alternating P/T)")
+    ap.add_argument("--blocks", type=int, default=6, help="Number of blocks")
     ap.add_argument("--tperblock", type=int, default=60, help="Trials per block")
     ap.add_argument("--snr", type=float, default=0.24, help="Base SNR (signal proportion)")
     ap.add_argument("--jitter-min", type=float, default=0.01, help="Min absolute jitter (e.g., 0.01 = 1%%)")
     ap.add_argument("--jitter-max", type=float, default=0.03, help="Max absolute jitter (e.g., 0.03 = 3%%)")
+
+    # --- NEW: condition scheduling & blinding ---
+    ap.add_argument("--condition", choices=["alt","P","T","seq"], default="alt",
+                    help="Block schedule: alt (alternate P/T), P (all peak), T (all trough), seq (use --cond-seq)")
+    ap.add_argument("--cond-seq", type=parse_cond_seq, default=None,
+                    help="Sequence of conditions for blocks when --condition=seq, e.g. 'PTTP' (repeats as needed)")
+    ap.add_argument("--blind-key", type=str, default=None,
+                    help="Simple blinding: hash this secret string to pick session condition (applies to all blocks)")
+    ap.add_argument("--blind-session", type=int, choices=[1,2], default=1,
+                    help="If using --blind-key, set 1 for first run and 2 for second run (flips condition)")
 
     ap.add_argument("--nofeedback", action="store_true", help="Disable feedback (Session 2 style)")
     ap.add_argument("--lsl", action="store_true", help="Enable LSL marker stream")
@@ -496,9 +517,37 @@ def main():
     stimcf = StimulusConfig()
     stimcf.snr_level = args.snr  # <-- fixed SNR from CLI
 
-    # Alternate conditions by block: P, T, P, T, ...
+    # --- Determine block condition schedule ---
+    def _resolve_blind_cond(key: str, session_num: int) -> str:
+        h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        last_bit = int(h[-1], 16) & 1
+        base = "T" if last_bit == 1 else "P"
+        if session_num == 2:
+            base = ("P" if base == "T" else "T")
+        return base
+
+    if args.blind_key:
+        session_cond = _resolve_blind_cond(args.blind_key, args.blind_session)
+        block_conds = [session_cond] * args.blocks
+        print(f"[BLIND] key='{args.blind_key}' session={args.blind_session} -> cond={session_cond}; applied to all {args.blocks} blocks")
+    else:
+        if args.condition == "seq":
+            seq_raw = (args.cond_seq or "")
+            if not seq_raw:
+                raise SystemExit("--condition=seq requires --cond-seq like 'PTTP'")
+            seq = list(seq_raw)
+            block_conds = [seq[i % len(seq)] for i in range(args.blocks)]
+        elif args.condition in ("P","T"):
+            block_conds = [args.condition] * args.blocks
+        else:  # alt
+            block_conds = [("P" if (b % 2) == 0 else "T") for b in range(args.blocks)]
+
+    print("Block condition schedule:", " ".join(block_conds))
+
+    # Run blocks
     for b in range(args.blocks):
-        cond = "P" if (b % 2) == 0 else "T"
+        cond = block_conds[b]
+        display_cond = (cond if not args.blind_key else f"BLINDED {args.blind_session}")
 
         # Equal angles per block (half 0°, half 90°), shuffled
         n = args.tperblock
@@ -572,7 +621,7 @@ def main():
             screen,
             block_number=b+1,
             total_blocks=args.blocks,
-            condition=cond,
+            condition=display_cond,
             trials_in_block=n,
             num_correct=num_correct_block,
             num_timeouts=num_timeouts_block,
