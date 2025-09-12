@@ -562,7 +562,7 @@ def main():
         angles = [0.0]*(n//2) + [90.0]*(n - n//2)
         random.shuffle(angles)
 
-        print(f"\n=== Block {b+1}/{args.blocks}  cond={cond}  trials={n}  base SNR={stimcf.snr_level:.3f} "
+        print(f"\n=== Block {b+1}/{args.blocks}  cond={display_cond}  trials={n}  base SNR={stimcf.snr_level:.3f} "
               f"jitter=±{int(args.jitter_min*100)}–{int(args.jitter_max*100)}% ===")
 
         # LSL marker: block start
@@ -599,7 +599,7 @@ def main():
                 use_debug_overlay=args.debug
             )
 
-            print(f"trial {trial_index:03d} block={b+1} cond={cond} angle={angle:.0f} "
+            print(f"trial {trial_index:03d} block={b+1} cond={display_cond} angle={angle:.0f} "
                   f"resp={'L' if resp_key==pygame.K_LEFT else 'R' if resp_key==pygame.K_RIGHT else '—'} "
                   f"correct={int(correct)} rt={rt_ms} timeout={int(timed_out)}")
 
