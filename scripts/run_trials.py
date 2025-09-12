@@ -497,7 +497,7 @@ def main():
     # LSL
     outlet = make_marker_outlet() if args.lsl else None
     if outlet is None and args.lsl:
-        print("[LSL] WARNING: --lsl requested but pylsl not available; continuing without markers.")
+        raise Exception("LSL ERROR: --lsl requested but pylsl not available; continuing without markers.")
 
     # Pygame display
     os.environ.setdefault("SDL_HINT_VIDEO_HIGHDPI_DISABLED", "0")
