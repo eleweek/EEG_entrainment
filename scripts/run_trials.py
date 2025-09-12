@@ -216,9 +216,9 @@ def upsert_stimulus(db: sqlite3.Connection, meta: dict) -> int:
     return row[0]
 
 def insert_trial(db: sqlite3.Connection, row: dict) -> int:
-    db.execute("""INSERT INTO trial(session_id,trial_index,cond,delay_cycles,angle_deg,
+    db.execute("""INSERT INTO trial(session_id,trial_index,cond,block,delay_cycles,angle_deg,
                  snr_level,snr_jitter,seed,resp_key,correct,rt_ms,timed_out,stim_id,ts_onset,ts_resp)
-                 VALUES(:session_id,:trial_index,:cond,:delay_cycles,:angle_deg,
+                 VALUES(:session_id,:trial_index,:cond,:block,:delay_cycles,:angle_deg,
                         :snr_level,:snr_jitter,:seed,:resp_key,:correct,:rt_ms,:timed_out,:stim_id,:ts_onset,:ts_resp)""", row)
     return db.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -250,6 +250,7 @@ def run_one_trial(
     stimcfg: StimulusConfig,
     *,
     trial_index: int,
+    block: int,
     session_id: str,
     db: Optional[sqlite3.Connection],
     stim_out_dir: Optional[str],
@@ -437,7 +438,7 @@ def run_one_trial(
         ts_onset = None  # we could store the ts from stim_onset_req if needed—left None here
         ts_resp  = None
 
-        row = dict(session_id=session_id, trial_index=trial_index, cond=cond,
+        row = dict(session_id=session_id, trial_index=trial_index, cond=cond, block=block,
                    delay_cycles=delay_cycles, angle_deg=angle_deg, snr_level=stimcfg.snr_level,
                    snr_jitter=snr_jitter, seed=seed,
                    resp_key=('L' if resp_key==pygame.K_LEFT else 'R' if resp_key==pygame.K_RIGHT else None),
@@ -582,6 +583,7 @@ def main():
             resp_key, correct, rt_ms, timed_out = run_one_trial(
                 screen, task, stimcf,
                 trial_index=trial_index,
+                block=b+1,
                 session_id=session_id,
                 db=db,
                 stim_out_dir=os.path.join(args.stimdir, session_id) if args.stimdir else None,
