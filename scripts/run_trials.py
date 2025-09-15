@@ -146,6 +146,44 @@ def build_centered_rect(center: tuple[int,int], side: int) -> pygame.Rect:
     cx, cy = center
     return pygame.Rect(cx - side//2, cy - side//2, side, side)
 
+# ============================ Ready screen ====================================
+
+def show_ready_screen(screen: pygame.Surface, outlet: Optional[StreamOutlet]):
+    """Display a pre-session screen until any key (except ESC) is pressed.
+
+    By the time this screen is shown, the LSL outlet should already be created
+    (if enabled). We emit markers around this wait period so the recording can
+    capture when the participant indicates readiness.
+    """
+    push_marker(outlet, "ready_wait_start")
+    running = True
+    while running:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                pygame.quit(); raise SystemExit
+            if e.type == pygame.KEYDOWN:
+                if e.key == pygame.K_ESCAPE:
+                    pygame.quit(); raise SystemExit
+                # Any other key continues
+                try:
+                    key_name = pygame.key.name(e.key)
+                except Exception:
+                    key_name = str(e.key)
+                push_marker(outlet, "ready_continue", key=key_name)
+                if e.key == pygame.K_SPACE:
+                    running = False
+
+        screen.fill((0,0,0))
+        lines = [
+            "Press any key when you are ready",
+            "",
+            ("LSL marker stream is active." if outlet is not None else "(Run with --lsl to emit markers.)"),
+            "Press ESC to quit"
+        ]
+        _render_text_lines(screen, lines)
+        pygame.display.flip()
+        pygame.time.delay(50)
+
 # ============================ SQLite helpers =================================
 
 SCHEMA = """
@@ -520,6 +558,9 @@ def main():
     W,H = screen.get_size()
     print("Window size:", (W,H), "| Desktop mode:", (pygame.display.Info().current_w, pygame.display.Info().current_h))
 
+    # Pre-trial readiness screen (LSL outlet is already created above)
+    show_ready_screen(screen, outlet)
+
     # config objects
     task   = TaskConfig(freq_hz=args.freq, cycles=args.cycles, show_feedback=not args.nofeedback)
     stimcf = StimulusConfig()
@@ -537,7 +578,7 @@ def main():
     if args.blind_key:
         session_cond = _resolve_blind_cond(args.blind_key, args.blind_session)
         block_conds = [session_cond] * args.blocks
-        print(f"[BLIND] key='{args.blind_key}' session={args.blind_session} -> cond={session_cond}; applied to all {args.blocks} blocks")
+        # print(f"[BLIND] key='{args.blind_key}' session={args.blind_session} -> cond={session_cond}; applied to all {args.blocks} blocks")
     else:
         if args.condition == "seq":
             seq_raw = (args.cond_seq or "")
@@ -550,7 +591,7 @@ def main():
         else:  # alt
             block_conds = [("P" if (b % 2) == 0 else "T") for b in range(args.blocks)]
 
-    print("Block condition schedule:", " ".join(block_conds))
+    # print("Block condition schedule:", " ".join(block_conds))
 
     # Run blocks
     for b in range(args.blocks):
