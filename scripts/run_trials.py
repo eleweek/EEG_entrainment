@@ -123,8 +123,7 @@ def show_block_break_screen(
 
         screen.fill((0,0,0))
 
-        accuracy_den = max(1, trials_in_block - num_timeouts)
-        accuracy_pct = 100.0 * (num_correct / accuracy_den)
+        accuracy_pct = 100.0 * (num_correct / trials_in_block)
         mean_rt_text = (f"{mean_rt_ms:.0f} ms" if mean_rt_ms is not None else "—")
 
         lines = [
