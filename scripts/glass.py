@@ -19,6 +19,7 @@ def parse_args():
     ap.add_argument("--handed", choices=["cw","ccw"], default="cw",
                     help="Spiral handedness for 0<angle<90. Default cw.")
     ap.add_argument("--seed", type=int, default=None, help="Random seed.")
+    ap.add_argument("output", nargs="?", help="If provided, save PNG to this path and exit.")
     return ap.parse_args()
 
 def compute_num_dipoles(ap_size, dot_r, density):
@@ -102,6 +103,20 @@ def draw_glass(surface, center, size, angle_deg, snr, density, shift, dot_r, han
 def main():
     args = parse_args()
     pygame.init()
+    # Headless save path if an output filename is provided
+    if args.output:
+        outfile = args.output
+        if not outfile.lower().endswith(".png"):
+            outfile += ".png"
+        surface = pygame.Surface((args.size, args.size))
+        draw_glass(surface, (args.size//2, args.size//2), args.size,
+                   float(args.angle), args.snr, args.density, args.shift,
+                   args.dotsize, args.handed, args.seed)
+        pygame.image.save(surface, outfile)
+        print(f"Saved: {outfile}")
+        pygame.quit()
+        return 0
+
     screen = pygame.display.set_mode((args.size, args.size))
     pygame.display.set_caption("Glass pattern")
     clock = pygame.time.Clock()
