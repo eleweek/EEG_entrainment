@@ -36,6 +36,11 @@ def plot_psd(psd, title=None, average=True, ylim=None):
     psd_freqs, fit_freq_range, fitted_curve, delta_db = fit_one_over_f_curve(psd, min_freq=3, max_freq=40, peak_alpha_freq=peak_alpha_freq)
 
     fig = psd.plot(average=average, show=False, spatial_colors=True)
+    # Remove borders/spines around all axes in the figure
+    for ax in fig.get_axes():
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.tick_params(top=False, right=False)
 
     axes = fig.get_axes()
     main_ax = axes[0]

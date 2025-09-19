@@ -88,6 +88,10 @@ def plot_iaf_histogram(ax, iaf_estimates, freq_resolution, color, label):
     ax.set_xticks(np.arange(np.min(unique_iafs), np.max(unique_iafs) + 0.5, 0.5))
     ax.set_xticklabels([f'{x:.1f}' for x in ax.get_xticks()])
     plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+    # Remove borders/spines
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.tick_params(top=False, right=False)
 
 def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, stockwell=False):
     BASELINE = (0.0, 0.1)
@@ -117,6 +121,10 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
             show=False,
             colorbar=True,
         )
+        # Remove borders on main spectrogram axis
+        for spine in ax_main.spines.values():
+            spine.set_visible(False)
+        ax_main.tick_params(top=False, right=False)
 
     if multitaper:
         fig, axs = plt.subplots(1, 3, figsize=(15, 5), sharey=True, layout="constrained")
@@ -146,6 +154,9 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
                 show=False,
                 colorbar=False,
             )
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+            ax.tick_params(top=False, right=False)
 
     if morlet:
         fig, axs = plt.subplots(1, 3, figsize=(15, 5), sharey=True, layout="constrained")
@@ -163,6 +174,9 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
             )
             n_cycles = "scaled by freqs" if not isinstance(n_cycles, int) else n_cycles
             ax.set_title(f"Using Morlet wavelet, n_cycles = {n_cycles}")
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+            ax.tick_params(top=False, right=False)
 
     if stockwell:
         fig, axs = plt.subplots(1, 3, figsize=(15, 5), sharey=True, layout="constrained")
@@ -174,6 +188,9 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
                 [0], baseline=BASELINE, mode="mean", axes=ax, show=False, colorbar=False
             )
             ax.set_title("Using S transform, width = {:0.1f}".format(width))
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+            ax.tick_params(top=False, right=False)
 
     return fig_main
 
@@ -196,6 +213,11 @@ fig_psd, psd_data = plot_psd(psd, title=title, average=not separate_channels)
 if preset_output_png:
     dpi = 100
     fig_psd.set_size_inches(output_width_px / dpi, output_height_px / dpi)
+    # Remove borders/spines around all axes in the figure
+    for ax in fig_psd.get_axes():
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        ax.tick_params(top=False, right=False)
     fig_psd.savefig(preset_output_png, dpi=dpi, bbox_inches='tight')
     sys.exit(0)
 
