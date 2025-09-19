@@ -21,11 +21,17 @@ parser = argparse.ArgumentParser(
                     description='Creates an alpha frequency plot and spectrograms from an XDF file')
 
 parser.add_argument('input_xdf_filename', type=str, help='Path to the XDF file')
+parser.add_argument('output_png_filename', nargs='?', default=None, help='Path to the output PNG file')
+parser.add_argument('--width', type=int, default=1920, help='Output PNG width in pixels (default: 1920)')
+parser.add_argument('--height', type=int, default=1080, help='Output PNG height in pixels (default: 1080)')
 parser.add_argument('--picks', type=str, default=None, help='Comma or space-separated list of channels to use')
 parser.add_argument('--separate-channels', action='store_true', help='Plot each channel separately')
 
 args = parser.parse_args()
 input_filename = args.input_xdf_filename
+preset_output_png = args.output_png_filename
+output_width_px = args.width
+output_height_px = args.height
 picks = parse_picks(args.picks)
 separate_channels = args.separate_channels
 
@@ -185,6 +191,13 @@ seconds = int(duration_seconds % 60)
 # Plot PSD in a separate window
 title = f"PSD of the whole recording ({hours:02d}:{minutes:02d}:{seconds:02d}), channels = " + " ".join(raw.ch_names)
 fig_psd, psd_data = plot_psd(psd, title=title, average=not separate_channels)
+
+# If an output PNG path was provided, save the PSD figure with the requested size
+if preset_output_png:
+    dpi = 100
+    fig_psd.set_size_inches(output_width_px / dpi, output_height_px / dpi)
+    fig_psd.savefig(preset_output_png, dpi=dpi, bbox_inches='tight')
+    sys.exit(0)
 
 # # Perform sliding window IAF estimation using both methods
 # iaf_estimates_original = sliding_window_iaf(raw, iaf_original, window_size=5, step_size=1)
