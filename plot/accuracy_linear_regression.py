@@ -10,6 +10,7 @@ import pandas as pd
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import seaborn as sns
+from matplotlib.ticker import MaxNLocator
 
 
 def parse_exclusions(excl_str: str) -> set[tuple[str, int]]:
@@ -241,6 +242,7 @@ def main():
     ax.set_xlabel("Within-condition exposure index (k)")
     ax.set_ylabel("Block accuracy (proportion correct)")
     ax.set_xlim(left=0.5)
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     y_min = float(df["acc"].min())
     y_max = float(df["acc"].max())
     pad = 0.02
