@@ -121,6 +121,13 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
             show=False,
             colorbar=True,
         )
+        ax_main.axhspan(8.0, 12.0, color='lightgray', alpha=0.12, zorder=0)
+        # Add light gray 8 Hz and 12 Hz ticks with labels on spectrogram y-axis
+        ax_main.set_yticks([8.0, 12.0], minor=True)
+        ax_main.set_yticklabels(['8 Hz', '12 Hz'], minor=True)
+        ax_main.tick_params(axis='y', which='minor', colors='lightgray', labelcolor='lightgray')
+        for label in ax_main.get_yminorticklabels():
+            label.set_fontsize(8)
         # Remove borders on main spectrogram axis
         for spine in ax_main.spines.values():
             spine.set_visible(False)
@@ -154,6 +161,12 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
                 show=False,
                 colorbar=False,
             )
+            ax.axhspan(8.0, 12.0, color='lightgray', alpha=0.12, zorder=0)
+            ax.set_yticks([8.0, 12.0], minor=True)
+            ax.set_yticklabels(['8 Hz', '12 Hz'], minor=True)
+            ax.tick_params(axis='y', which='minor', colors='lightgray', labelcolor='lightgray')
+            for label in ax.get_yminorticklabels():
+                label.set_fontsize(8)
             for spine in ax.spines.values():
                 spine.set_visible(False)
             ax.tick_params(top=False, right=False)
@@ -172,6 +185,12 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
                 show=False,
                 colorbar=False,
             )
+            ax.axhspan(8.0, 12.0, color='lightgray', alpha=0.12, zorder=0)
+            ax.set_yticks([8.0, 12.0], minor=True)
+            ax.set_yticklabels(['8 Hz', '12 Hz'], minor=True)
+            ax.tick_params(axis='y', which='minor', colors='lightgray', labelcolor='lightgray')
+            for label in ax.get_yminorticklabels():
+                label.set_fontsize(8)
             n_cycles = "scaled by freqs" if not isinstance(n_cycles, int) else n_cycles
             ax.set_title(f"Using Morlet wavelet, n_cycles = {n_cycles}")
             for spine in ax.spines.values():
@@ -187,6 +206,12 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
             power.plot(
                 [0], baseline=BASELINE, mode="mean", axes=ax, show=False, colorbar=False
             )
+            ax.axhspan(8.0, 12.0, color='lightgray', alpha=0.12, zorder=0)
+            ax.set_yticks([8.0, 12.0], minor=True)
+            ax.set_yticklabels(['8 Hz', '12 Hz'], minor=True)
+            ax.tick_params(axis='y', which='minor', colors='lightgray', labelcolor='lightgray')
+            for label in ax.get_yminorticklabels():
+                label.set_fontsize(8)
             ax.set_title("Using S transform, width = {:0.1f}".format(width))
             for spine in ax.spines.values():
                 spine.set_visible(False)
@@ -208,6 +233,17 @@ seconds = int(duration_seconds % 60)
 # Plot PSD in a separate window
 title = f"PSD of the whole recording ({hours:02d}:{minutes:02d}:{seconds:02d}), channels = " + " ".join(raw.ch_names)
 fig_psd, psd_data = plot_psd(psd, title=title, average=not separate_channels)
+# Shade typical alpha band 8–12 Hz on PSD
+psd_axes = fig_psd.get_axes()
+if len(psd_axes) > 0:
+    psd_axes[0].axvspan(8.0, 12.0, color='lightgray', alpha=0.12, zorder=0)
+    # Add light gray 8 Hz and 12 Hz ticks with labels on PSD x-axis
+    ax_psd = psd_axes[0]
+    ax_psd.set_xticks([8.0, 12.0], minor=True)
+    ax_psd.set_xticklabels(['8 Hz', '12 Hz'], minor=True)
+    ax_psd.tick_params(axis='x', which='minor', colors='lightgray', labelcolor='lightgray')
+    for label in ax_psd.get_xminorticklabels():
+        label.set_fontsize(8)
 
 # If an output PNG path was provided, save the PSD figure with the requested size
 if preset_output_png:
