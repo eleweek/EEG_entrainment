@@ -221,7 +221,7 @@ def main():
     # Plot
     sns.set_context("talk")
     fig, ax = plt.subplots(figsize=(10,6))
-    palette = {"P":"#1f77b4", "T":"#d62728"}
+    palette = {"P":"red", "T":"#3A53A4"}
     jitter   = {"P":-0.05, "T":+0.05}
     label_map = {"P": "P-match", "T": "T-match"}
 
@@ -257,6 +257,31 @@ def main():
         spine.set_visible(False)
     ax.tick_params(axis="both", which="both", length=0)
     ax.legend(frameon=False)
+
+    # Minimalist (Tufte-esque) per-condition mean markers on the right margin
+    # Short colored ticks at the mean accuracy with small numeric labels
+    means: dict[str, float] = {}
+    for cond in ["P","T"]:
+        sub = df[df["cond"] == cond]
+        if sub.empty:
+            continue
+        total_hits = float(sub["hits"].sum())
+        total_n = float(sub["n"].sum())
+        if total_n <= 0:
+            continue
+        means[cond] = total_hits / total_n
+
+    trans = ax.get_yaxis_transform()
+    x0, x1, x_text = 0.985, 1.0, 1.005  # positions in axes-fraction for right margin
+    for cond, mean_acc in means.items():
+        if not np.isfinite(mean_acc):
+            continue
+        # short tick
+        ax.plot([x0, x1], [mean_acc, mean_acc], transform=trans, color=palette[cond],
+                lw=2, solid_capstyle="butt", zorder=5)
+        # numeric label
+        ax.text(x_text, mean_acc, f"{mean_acc:.2f} avg", transform=trans, color=palette[cond],
+                fontsize=10, va="center", ha="left", clip_on=False)
 
     plt.tight_layout()
     if args.save:
