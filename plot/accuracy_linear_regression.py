@@ -223,18 +223,19 @@ def main():
     fig, ax = plt.subplots(figsize=(10,6))
     palette = {"P":"#1f77b4", "T":"#d62728"}
     jitter   = {"P":-0.05, "T":+0.05}
+    label_map = {"P": "P-match", "T": "T-match"}
 
     for cond in ["P","T"]:
         sub = df[df["cond"] == cond]
         if sub.empty: continue
         x = sub["k"].astype(float) + jitter[cond]
         ax.scatter(x, sub["acc"], s=50, alpha=0.85, color=palette[cond],
-                   label=f"{cond} blocks", edgecolors="none")
+                   label=label_map[cond], edgecolors="none")
 
     for cond in ["P","T"]:
         res, curve = fits[cond]
         if res is None or curve.empty: continue
-        ax.plot(curve["k"], curve["mean"], lw=3, color=palette[cond], label=f"{cond} linear fit")
+        ax.plot(curve["k"], curve["mean"], lw=1, linestyle="--", color=palette[cond], label=f"{cond} linear fit")
         
 
     ax.set_xlabel("Within-condition exposure index (k)")
@@ -243,7 +244,13 @@ def main():
     y_min = float(df["acc"].min())
     y_max = float(df["acc"].max())
     pad = 0.02
-    ax.set_ylim(max(0.0, y_min - pad), min(1.0, y_max + pad))
+    ylim_bottom = max(0.0, y_min - pad)
+    # If the max accuracy reaches 1.0, extend the top slightly so the marker isn't clipped
+    if y_max >= 1.0 - 1e-9:
+        ylim_top = 1.0 + pad
+    else:
+        ylim_top = min(1.0, y_max + pad)
+    ax.set_ylim(ylim_bottom, ylim_top)
     ax.set_title(args.title)
     ax.grid(True, alpha=0.25)
     for spine in ax.spines.values():
