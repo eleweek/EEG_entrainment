@@ -239,8 +239,8 @@ def main():
         ax.plot(curve["k"], curve["mean"], lw=1, linestyle="--", color=palette[cond], label=f"{cond} linear fit")
         
 
-    ax.set_xlabel("Within-condition exposure index (k)")
-    ax.set_ylabel("Block accuracy (proportion correct)")
+    ax.set_xlabel(f"Within-condition block index (each block = {args.tperblock} trials)")
+    ax.set_ylabel("Accuracy")
     ax.set_xlim(left=0.5)
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     y_min = float(df["acc"].min())
