@@ -9,6 +9,12 @@ The “stimulus prototypes” are easy to tell apart. The ones used in the study
 
 If you are in London and want to volunteer for the actual replication: please don't run code that display stimuli — I'll be excluding people who have done too many patterns. 
 
+## Video of the demo
+
+On the 13th of September at the ACX meetup in London I did a demo of the coming replication. I then edited a short 5 min [video](http://www.youtube.com/watch?v=pP5dO97l9B) with an explanation of the study. You can watch it by clicking on the preview. 
+
+[![IMAGE ALT TEXT](http://img.youtube.com/vi/pP5dO97l9Bo/0.jpg)](http://www.youtube.com/watch?v=pP5dO97l9Bo "Replication Demo")
+
 ## Replication in London
 
 I will be running a study replication in London on 10 participants from mid-September until mid-October. 
