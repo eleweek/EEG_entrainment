@@ -14,7 +14,7 @@ from libs.psd import get_peak_alpha_freq
 
 from specparam import SpectralModel, SpectralGroupModel
 from specparam.bands import Bands
-from specparam.analysis import get_band_peak_group
+from specparam.data.periodic import get_band_peak_group
 
 parser = argparse.ArgumentParser(
                     prog='alpha_from_xdf',

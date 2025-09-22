@@ -7,7 +7,7 @@ import mne
 
 from specparam import SpectralModel, SpectralGroupModel
 from specparam.bands import Bands
-from specparam.analysis import get_band_peak_group
+from specparam.data.periodic import get_band_peak_group, get_band_peak
 from specparam.plts.spectra import plot_spectra
 
 
@@ -41,7 +41,7 @@ bands = Bands({'theta': [3, 7],
 input_filename = sys.argv[1]
 
 raw = load_raw_xdf(input_filename)
-filter_and_drop_dead_channels(raw, None)
+filter_and_drop_dead_channels(raw, picks=["O1", "Oz", "O2"])
 print(raw.ch_names)
 
 psd = raw.compute_psd(fmin=1.0, fmax=45.0)
@@ -54,6 +54,7 @@ fg.report(psd_freqs, psd_values, [3, 45])
 # Plot the topographies across different frequency bands
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 for ind, (label, band_def) in enumerate(bands):
+    alpha_peaks = get_band_peak_group(fg, bands['alpha'])
 
     # Get the power values across channels for the current band
     band_power = check_nans(get_band_peak_group(fg, band_def)[:, 1])
@@ -66,6 +67,16 @@ for ind, (label, band_def) in enumerate(bands):
     # Set the plot title
     axes[ind].set_title(label + ' power', {'fontsize' : 20})
 
+alpha_peaks = get_band_peak_group(fg, bands['alpha'])
+print("Best alpha peaks", alpha_peaks)
+
+
+peaks = np.empty((0, 3))
+for i in range(len(fg.get_results())):
+    model = fg.get_model(i)
+    peaks = np.vstack((peaks, get_band_peak(model, bands['alpha'], select_highest=False)))
+
+print("All alpha peaks", peaks)
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 6))
 for ind, (label, band_def) in enumerate(bands):
