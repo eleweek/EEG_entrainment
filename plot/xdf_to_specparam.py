@@ -56,7 +56,7 @@ raw = load_raw_xdf(input_filename)
 filter_and_drop_dead_channels(raw, picks=picks)
 print(raw.ch_names)
 
-psd = raw.compute_psd(fmin=1.0, fmax=45.0)
+psd = raw.compute_psd(fmin=1.0, fmax=45.0, n_fft=int(raw.info['sfreq'] * 10))
 psd_values, psd_freqs = psd.get_data(return_freqs=True)
 
 fg = SpectralGroupModel()
