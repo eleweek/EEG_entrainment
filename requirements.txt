@@ -33,6 +33,7 @@ numpy==1.26.4
 packaging==24.0
 pandas==2.2.2
 parso==0.8.3
+patsy==1.0.1
 pexpect==4.9.0
 pillow==10.2.0
 platformdirs==4.2.0
@@ -206,11 +207,13 @@ pyzmq==25.1.2
 QtPy==2.4.1
 requests==2.31.0
 scipy==1.12.0
+seaborn==0.13.2
 setuptools==69.2.0
 six==1.16.0
 sounddevice==0.4.6
-specparam==2.0.0rc2
+specparam==2.0.0rc3
 stack-data==0.6.3
+statsmodels==0.14.5
 tornado==6.4
 tqdm==4.66.2
 traitlets==5.14.2
