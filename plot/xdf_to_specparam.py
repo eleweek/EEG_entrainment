@@ -56,12 +56,12 @@ raw = load_raw_xdf(input_filename)
 filter_and_drop_dead_channels(raw, picks=picks)
 print(raw.ch_names)
 
-psd = raw.compute_psd(fmin=1.0, fmax=45.0, n_fft=int(raw.info['sfreq'] * 10))
+psd = raw.compute_psd(fmin=1.0, fmax=40.0, n_fft=int(raw.info['sfreq'] * 10))
 psd_values, psd_freqs = psd.get_data(return_freqs=True)
 
 fg = SpectralGroupModel()
 print(psd_freqs.shape, psd_values.shape)
-fg.report(psd_freqs, psd_values, [3, 45])
+fg.report(psd_freqs, psd_values, [3, 40])
 
 # Compute IAF by subtracting each channel's aperiodic model, averaging residuals, and finding peak
 def _aperiodic_log10_from_params(freqs, params):

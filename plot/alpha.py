@@ -47,7 +47,7 @@ def iaf_specparam(psd):
     psd_values, freqs = psd.get_data(return_freqs=True)
 
     fg = SpectralGroupModel(max_n_peaks=6)
-    fg.fit(freqs, psd_values, [3, 45])
+    fg.fit(freqs, psd_values, [3, 40])
     alpha_peaks = get_band_peak_group(fg, bands['alpha'])
     res = None
     if alpha_peaks.size > 0:
@@ -67,7 +67,7 @@ def sliding_window_iaf(raw, iaf_method, window_size=10, step_size=1):
 
         end = start + int(window_size * raw.info['sfreq'])
         window_raw = raw.copy().crop(tmin=raw.times[start], tmax=raw.times[end])
-        window_psd = window_raw.compute_psd(fmin=1.0, fmax=45.0, n_fft=int(raw.info['sfreq'] * 10))
+        window_psd = window_raw.compute_psd(fmin=1.0, fmax=40.0, n_fft=int(raw.info['sfreq'] * 10))
         
         iaf = iaf_method(window_psd)
         print("IAF estimation took", time.perf_counter() - t0, "seconds")
@@ -223,7 +223,7 @@ def plot_spectrogram(raw, single_best_plot=True, multitaper=True, morlet=False, 
 raw = load_recording(input_filename)
 filter_and_drop_dead_channels(raw, picks)
 
-psd = raw.compute_psd(fmin=1.0, fmax=45.0, n_fft=int(raw.info['sfreq'] * 10))
+psd = raw.compute_psd(fmin=1.0, fmax=40.0, n_fft=int(raw.info['sfreq'] * 10))
 
 duration_seconds = len(raw.get_data()[0]) / raw.info['sfreq']
 hours = int(duration_seconds // 3600)
