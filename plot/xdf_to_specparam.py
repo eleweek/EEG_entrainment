@@ -63,6 +63,46 @@ fg = SpectralGroupModel()
 print(psd_freqs.shape, psd_values.shape)
 fg.report(psd_freqs, psd_values, [3, 45])
 
+# Compute IAF by subtracting each channel's aperiodic model, averaging residuals, and finding peak
+def _aperiodic_log10_from_params(freqs, params):
+    # params can be [offset, exp] or [offset, knee, exp]
+    if len(params) == 2:
+        offset, exponent = params
+        return offset - exponent * np.log10(freqs)
+    elif len(params) == 3:
+        offset, knee, exponent = params
+        return offset - np.log10(knee + np.power(freqs, exponent))
+    else:
+        raise ValueError('Unexpected aperiodic params length: {}'.format(len(params)))
+
+try:
+    # Safeguard against zeros before log10
+    log_psd_values = np.log10(np.maximum(psd_values, 1e-30))
+
+    residuals = []
+    for ch_idx in range(len(fg.get_results())):
+        model = fg.get_model(ind=ch_idx)
+        ap_params = model.get_params('aperiodic_params')
+        ap_log = _aperiodic_log10_from_params(psd_freqs, ap_params)
+        residuals.append(log_psd_values[ch_idx] - ap_log)
+
+    residuals = np.vstack(residuals) if len(residuals) > 0 else np.empty_like(psd_values)
+    mean_residual = np.nanmean(residuals, axis=0) if residuals.size else None
+
+    iaf_hz = None
+    if mean_residual is not None:
+        alpha_mask = (psd_freqs >= 7.0) & (psd_freqs <= 14.0)
+        if np.any(alpha_mask):
+            peak_idx = np.argmax(mean_residual[alpha_mask])
+            iaf_hz = psd_freqs[alpha_mask][peak_idx]
+            print("IAF (aperiodic-subtracted residual peak): {:.3f} Hz".format(float(iaf_hz)))
+        else:
+            print("Warning: alpha band mask returned empty range; cannot compute IAF.")
+    else:
+        print("Warning: no residuals computed; cannot compute IAF.")
+except Exception as e:
+    print("Failed to compute IAF from aperiodic-subtracted residuals:", e)
+
 # Plot the topographies across different frequency bands
 fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 for ind, (label, band_def) in enumerate(bands):
@@ -92,8 +132,10 @@ print("All alpha peaks", peaks)
 
 num_channels = len(fg.get_results())
 if num_channels > 0:
-    ncols = int(np.ceil(np.sqrt(num_channels)))
-    nrows = int(np.ceil(num_channels / ncols))
+    # Reserve one extra axis for the aperiodic-adjusted average, if available
+    num_plots = num_channels + (1 if ('mean_residual' in locals() and mean_residual is not None) else 0)
+    ncols = int(np.ceil(np.sqrt(num_plots)))
+    nrows = int(np.ceil(num_plots / ncols))
 
     fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 3.0, nrows * 2.5))
     axes = np.array(axes).reshape(-1)
@@ -111,8 +153,26 @@ if num_channels > 0:
         ax.set_title(raw.ch_names[channel_index], {'fontsize': 10})
         used_axes.append(ax)
 
+    # Plot aperiodic-adjusted average residual spectrum on the next axis, if computed
+    avg_ax = None
+    if 'mean_residual' in locals() and mean_residual is not None:
+        if num_channels < len(axes):
+            avg_ax = axes[num_channels]
+            avg_ax.plot(psd_freqs, mean_residual, color='green', linewidth=1.0)
+            avg_ax.axvspan(7.0, 14.0, color='lightgray', alpha=0.12, zorder=0)
+            # Highlight the typical alpha band 8–12 Hz with a darker shade
+            avg_ax.axvspan(8.0, 12.0, color='gray', alpha=0.25, zorder=1)
+            if 'iaf_hz' in locals() and iaf_hz is not None:
+                avg_ax.axvline(iaf_hz, color='green', linestyle=':', linewidth=1.0)
+            title = 'aperiodic-adjusted average'
+            if 'iaf_hz' in locals() and iaf_hz is not None:
+                title = f'aperiodic-adjusted average (IAF={iaf_hz:.2f} Hz)'
+            avg_ax.set_title(title, {'fontsize': 10})
+            avg_ax.grid(False)
+
     # Hide any unused axes
-    for ax in axes[num_channels:]:
+    end_used = num_channels + (1 if avg_ax is not None else 0)
+    for ax in axes[end_used:]:
         ax.set_visible(False)
 
     # Harmonize y-limits across used subplots
@@ -135,6 +195,8 @@ if num_channels > 0:
     fig.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, 0.995), ncol=3, frameon=False)
     # Make space at the top for the shared legend
     fig.tight_layout(rect=(0, 0, 1, 0.95))
+
+    # Removed per-channel IAF annotation in favor of the separate average subplot
 
 
 
