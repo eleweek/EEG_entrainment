@@ -6,11 +6,13 @@ from matplotlib.lines import Line2D
 import numpy as np
 import matplotlib.pyplot as plt
 import mne
+from scipy.signal import find_peaks
 
 from specparam import SpectralModel, SpectralGroupModel
 from specparam.bands import Bands
 from specparam.data.periodic import get_band_peak_group, get_band_peak
 from specparam.plts.spectra import plot_spectra
+from specparam.sim.gen import gen_periodic
 
 
 from libs.file_formats import load_raw_xdf
@@ -75,6 +77,50 @@ def _aperiodic_log10_from_params(freqs, params):
     else:
         raise ValueError('Unexpected aperiodic params length: {}'.format(len(params)))
 
+def detect_residual_peaks(freqs,
+                          residual_log10,
+                          peak_width_limits=(0.5, 12.0),
+                          max_n_peaks=np.inf,
+                          min_peak_height=0.0,
+                          peak_threshold=1.5,
+                          verbose=False):
+    """Fit peaks directly on pre-computed log10 residuals (aperiodic-subtracted).
+
+    Returns peak parameters as [CF, PW, BW] for each detected peak.
+    """
+
+    # Initialize a model to leverage specparam's internal peak fitting
+    sm = SpectralModel(
+        peak_width_limits=peak_width_limits,
+        max_n_peaks=max_n_peaks,
+        min_peak_height=min_peak_height,
+        peak_threshold=peak_threshold,
+        verbose=verbose,
+    )
+
+    # Add dummy linear-power data to establish frequency context
+    dummy_power_linear = np.ones_like(freqs)
+    sm.add_data(freqs, dummy_power_linear)
+
+    # Provide the residuals (already in log10 space) for peak fitting
+    sm._spectrum_flat = residual_log10.copy()
+    sm.freq_range = [freqs[0], freqs[-1]]
+    if len(freqs) > 1:
+        sm.freq_res = freqs[1] - freqs[0]
+
+    # Run internal peak fitting on the residuals
+    gaussian_params = sm._fit_peaks(sm._spectrum_flat.copy())
+    if gaussian_params.size == 0:
+        return np.empty((0, 3))
+
+    # Construct modeled spectrum for peak param conversion; baseline is zero in residual space
+    peak_fit = gen_periodic(freqs, gaussian_params.flatten())
+    sm.modeled_spectrum_ = peak_fit
+    sm._ap_fit = np.zeros_like(freqs)
+
+    peak_params = sm._create_peak_params(gaussian_params)
+    return peak_params
+
 try:
     # Safeguard against zeros before log10
     log_psd_values = np.log10(np.maximum(psd_values, 1e-30))
@@ -96,6 +142,21 @@ try:
             peak_idx = np.argmax(mean_residual[alpha_mask])
             iaf_hz = psd_freqs[alpha_mask][peak_idx]
             print("IAF (aperiodic-subtracted residual peak): {:.3f} Hz".format(float(iaf_hz)))
+            # Also print all alpha peaks detected on the averaged residuals
+            residual_peak_params = detect_residual_peaks(
+                psd_freqs, mean_residual, peak_threshold=1.5, min_peak_height=0.0, verbose=False
+            )
+            if residual_peak_params.size:
+                alpha_residual_peaks = residual_peak_params[
+                    (residual_peak_params[:, 0] >= 7.0) & (residual_peak_params[:, 0] <= 14.0)
+                ]
+                formatted = np.array2string(
+                    alpha_residual_peaks,
+                    formatter={'float_kind': lambda x: f"{float(x):.4f}"}
+                )
+                print("Alpha peaks on residuals [CF, PW, BW]:", formatted)
+            else:
+                print("Alpha peaks on residuals [CF, PW, BW]: []")
         else:
             print("Warning: alpha band mask returned empty range; cannot compute IAF.")
     else:
@@ -196,7 +257,6 @@ if num_channels > 0:
     # Make space at the top for the shared legend
     fig.tight_layout(rect=(0, 0, 1, 0.95))
 
-    # Removed per-channel IAF annotation in favor of the separate average subplot
 
 
 
