@@ -86,7 +86,12 @@ def detect_residual_peaks(freqs,
                           verbose=False):
     """Fit peaks directly on pre-computed log10 residuals (aperiodic-subtracted).
 
-    Returns peak parameters as [CF, PW, BW] for each detected peak.
+    Returns
+    -------
+    peak_params : ndarray, shape (n_peaks, 3)
+        Peak parameters as [CF, PW, BW] for each detected peak.
+    peak_fit : ndarray, shape (n_freqs,)
+        The modeled periodic fit (sum of Gaussians) over `freqs` in log10 units.
     """
 
     # Initialize a model to leverage specparam's internal peak fitting
@@ -111,7 +116,7 @@ def detect_residual_peaks(freqs,
     # Run internal peak fitting on the residuals
     gaussian_params = sm._fit_peaks(sm._spectrum_flat.copy())
     if gaussian_params.size == 0:
-        return np.empty((0, 3))
+        return np.empty((0, 3)), np.zeros_like(freqs)
 
     # Construct modeled spectrum for peak param conversion; baseline is zero in residual space
     peak_fit = gen_periodic(freqs, gaussian_params.flatten())
@@ -119,7 +124,7 @@ def detect_residual_peaks(freqs,
     sm._ap_fit = np.zeros_like(freqs)
 
     peak_params = sm._create_peak_params(gaussian_params)
-    return peak_params
+    return peak_params, peak_fit
 
 try:
     # Safeguard against zeros before log10
@@ -143,7 +148,7 @@ try:
             iaf_hz = psd_freqs[alpha_mask][peak_idx]
             print("IAF (aperiodic-subtracted residual peak): {:.3f} Hz".format(float(iaf_hz)))
             # Also print all alpha peaks detected on the averaged residuals
-            residual_peak_params = detect_residual_peaks(
+            residual_peak_params, residual_peak_fit = detect_residual_peaks(
                 psd_freqs, mean_residual, peak_threshold=1.5, min_peak_height=0.0, verbose=False
             )
             if residual_peak_params.size:
@@ -225,6 +230,12 @@ if num_channels > 0:
             avg_ax.axvspan(8.0, 12.0, color='gray', alpha=0.25, zorder=1)
             if 'iaf_hz' in locals() and iaf_hz is not None:
                 avg_ax.axvline(iaf_hz, color='green', linestyle=':', linewidth=1.0)
+            # Overlay the modeled periodic fit on the residuals
+            if 'residual_peak_fit' in locals() and residual_peak_fit is not None:
+                # Only draw within alpha band region for clarity
+                alpha_mask = (psd_freqs >= 7.0) & (psd_freqs <= 14.0)
+                avg_ax.plot(psd_freqs[alpha_mask], residual_peak_fit[alpha_mask],
+                            color='orange', linewidth=1.2, alpha=0.9, label='Residual fit')
             title = 'aperiodic-adjusted average'
             if 'iaf_hz' in locals() and iaf_hz is not None:
                 title = f'aperiodic-adjusted average (IAF={iaf_hz:.2f} Hz)'
