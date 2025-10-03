@@ -272,4 +272,5 @@ if num_channels > 0:
 
 
 print("Before plt.show()")
+plt.tight_layout()
 plt.show()
