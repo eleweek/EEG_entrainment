@@ -129,13 +129,19 @@ def run_erp_analysis(
     tmin: float,
     tmax: float,
     baseline: Optional[Tuple[Optional[float], Optional[float]]],
+    average_channels: bool = True,
 ) -> Optional[Tuple[Dict[str, mne.Evoked], mne.Epochs]]:
-    """Create ERPs for the requested annotation descriptions.
+    """Create ERPs for the requested annotation descriptions."""
 
-    Returns dict of evokeds and the epochs container.
-    """
-    # Slightly tailor filtering for ERP (optional low-pass)
     raw_erp = raw.copy().filter(l_freq=None, h_freq=30.0, verbose=False)
+
+    if average_channels:
+        data = raw_erp.get_data()
+        avg = data.mean(axis=0, keepdims=True)
+        sfreq = raw_erp.info['sfreq']
+        info_avg = mne.create_info(['posterior_avg'], sfreq, ch_types=['eeg'], verbose=False)
+        raw_erp = mne.io.RawArray(avg, info_avg, verbose=False)
+        raw_erp.set_annotations(raw.annotations)
 
     event_id = build_event_id_from_annotations(raw_erp, event_names)
     if not event_id:
