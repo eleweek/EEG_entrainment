@@ -437,15 +437,16 @@ def run_one_trial(
                 fb_deadline = now + task.feedback_ms/1000.0
 
         elif phase == Phase.FB:
-            screen.fill((0,0,0)); draw_fixation_dot(screen, center_screen)
+            screen.fill((0,0,0))
+            push_marker(outlet, "feedback_start", trial=trial_index)
+            draw_fixation_dot(screen, center_screen)
             if not timed_out and task.show_feedback:
                 (glyph_tick if correct else glyph_cross)(screen, center_screen)
             pygame.display.flip()
             if time.perf_counter() >= fb_deadline:
                 phase = Phase.ITI
                 jitter = random.randint(-task.iti_jitter_ms, task.iti_jitter_ms)
-                iti_deadline = time.perf_counter() + (task.iti_ms + jitter)/1000.0
-                push_marker(outlet, "feedback_end", trial=trial_index)
+                iti_deadline = time.perf_counter() + (task.iti_ms - task.feedback_ms + jitter)/1000.0
 
         elif phase == Phase.ITI:
             if time.perf_counter() >= iti_deadline:
