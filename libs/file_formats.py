@@ -1,4 +1,5 @@
 import math
+import json
 
 import mne
 import numpy as np
@@ -91,11 +92,25 @@ def load_raw_xdf(file_path):
     if markers_stream is not None:
         eeg_start_time = eeg_stream['time_stamps'][0]
 
-        onset = markers_stream['time_stamps'][:-1] - eeg_start_time
-        duration = markers_stream['time_stamps'][1:] - onset - eeg_start_time
-        description = [ts[0].split(' ')[2].rstrip('.wav') for ts in markers_stream['time_series'][:-1]]
-        annotations = mne.Annotations(onset, duration, description)
+        marker_ts = np.asarray(markers_stream['time_stamps'])
+        onsets = marker_ts - eeg_start_time
+        durations = np.zeros_like(onsets)
 
+        descriptions = []
+
+        for sample in markers_stream['time_series']:
+            s = sample[0] if isinstance(sample, (list, tuple, np.ndarray)) else sample
+            if isinstance(s, (bytes, bytearray)):
+                s = s.decode('utf-8')
+            payload = json.loads(s)
+            if not isinstance(payload, dict) or 'ev' not in payload:
+                raise ValueError("Marker payload must be a JSON object with an 'ev' field")
+            descriptions.append(str(payload['ev']))
+
+        if len(descriptions) != len(onsets):
+            raise ValueError('Markers stream time_stamps and time_series length mismatch')
+
+        annotations = mne.Annotations(onsets, durations, descriptions)
         raw.set_annotations(annotations)
 
     return raw
