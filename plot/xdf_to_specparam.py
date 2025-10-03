@@ -49,13 +49,16 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument('input_xdf_filename', type=str, help='Path to the XDF file')
 parser.add_argument('--picks', type=str, default=None, help='Comma or space-separated list of channels to use')
+parser.add_argument('--avgref', action='store_true', help='Re-reference EEG to average after filtering')
+parser.add_argument('--to-drop', type=str, default=None, help='Comma or space-separated list of channels to drop before filtering')
 
 args = parser.parse_args()
 input_filename = args.input_xdf_filename
 picks = parse_picks(args.picks)
+to_drop = parse_picks(args.to_drop)
 
 raw = load_raw_xdf(input_filename)
-filter_and_drop_dead_channels(raw, picks=picks)
+filter_and_drop_dead_channels(raw, picks=picks, to_drop=to_drop, avgref=args.avgref)
 print(raw.ch_names)
 
 psd = raw.compute_psd(fmin=1.0, fmax=40.0, n_fft=int(raw.info['sfreq'] * 10))
