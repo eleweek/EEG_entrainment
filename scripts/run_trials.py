@@ -428,7 +428,8 @@ def run_one_trial(
         elif phase == Phase.RESP:
             # Keep stimulus visible for 200 ms, then blank to fixation
             if now - stim_on_t >= task.stim_ms/1000.0:
-                screen.fill((0,0,0)); draw_fixation_dot(screen, center_screen)
+                screen.fill((0,0,0))
+                draw_fixation_dot(screen, center_screen)
                 if use_debug_overlay:
                     pygame.draw.rect(screen, (0,255,0), flicker_rect, 1)
                     pygame.draw.rect(screen, (255,0,0), aperture_rect, 1)
