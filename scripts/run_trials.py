@@ -114,10 +114,12 @@ def show_block_break_screen(
     while running:
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
-                pygame.quit(); raise SystemExit
+                pygame.quit()
+                raise SystemExit
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_ESCAPE:
-                    pygame.quit(); raise SystemExit
+                    pygame.quit()
+                    raise SystemExit
                 if e.key in (pygame.K_SPACE, pygame.K_RETURN):
                     running = False
 
@@ -159,10 +161,12 @@ def show_ready_screen(screen: pygame.Surface, outlet: Optional[StreamOutlet]):
     while running:
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
-                pygame.quit(); raise SystemExit
+                pygame.quit()
+                raise SystemExit
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_ESCAPE:
-                    pygame.quit(); raise SystemExit
+                    pygame.quit()
+                    raise SystemExit
                 # Any other key continues
                 try:
                     key_name = pygame.key.name(e.key)
@@ -357,10 +361,12 @@ def run_one_trial(
         events = pygame.event.get()
         for e in events:
             if e.type == pygame.QUIT:
-                pygame.quit(); raise SystemExit
+                pygame.quit()
+                raise SystemExit
             if e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_ESCAPE:
-                    pygame.quit(); raise SystemExit
+                    pygame.quit()
+                    raise SystemExit
                 if e.key == pygame.K_F1:
                     use_debug_overlay = not use_debug_overlay
                 if e.key in (pygame.K_LEFT, pygame.K_RIGHT) and response_enabled and phase in (Phase.STIM, Phase.RESP):
@@ -431,7 +437,11 @@ def run_one_trial(
                 # remain in RESP until key or deadline
 
             if now >= resp_deadline and resp_key is None:
-                timed_out = True; correct = False; rt_ms = -1; response_enabled = False
+                timed_out = True
+                correct = False
+                rt_ms = -1
+                response_enabled = False
+
                 push_marker(outlet, "response", trial=trial_index, resp='none', correct=False, rt_ms=-1, timeout=True)
                 phase = Phase.FB
                 fb_deadline = now + task.feedback_ms/1000.0
@@ -618,7 +628,8 @@ def main():
             # quick escape at block level
             for e in pygame.event.get():
                 if e.type == pygame.QUIT or (e.type==pygame.KEYDOWN and e.key==pygame.K_ESCAPE):
-                    pygame.quit(); return
+                    pygame.quit()
+                    return
 
             angle = angles[i]
 
