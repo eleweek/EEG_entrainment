@@ -25,7 +25,7 @@ The location will be either Newspeak House (aka the London College of Political 
 
 ### London Replication Hardware
 
-1. EEG Headset: [OpenBCI Ultracortex "Mark IV" EEG Headset](https://shop.openbci.com/products/ultracortex-mark-iv) with [8-channel Cyton Board](https://shop.openbci.com/products/cyton-biosensing-board-8-channel) and [ThinkPulse Active Electrodes](https://shop.openbci.com/products/thinkpulse-active-electrode-8-channel-starter-kit). Current electrodes: Fp1, Fp2, Fz, C4, Pz, O1, Oz, O2
+1. EEG Headset: [OpenBCI Ultracortex "Mark IV" EEG Headset](https://shop.openbci.com/products/ultracortex-mark-iv) with [8-channel Cyton Board](https://shop.openbci.com/products/cyton-biosensing-board-8-channel) and [ThinkPulse Active Electrodes](https://shop.openbci.com/products/thinkpulse-active-electrode-8-channel-starter-kit). Current electrodes: Fp1, Fp2, Fz, C4, O1, Oz, O2, Cz used as a reference.
 2. Monitor: LG UltraGear 24GQ50F 1920×1080 with AMD FreeSync (AMD's VSync) 48..165 Hz.
 
 ## Running your own replication
