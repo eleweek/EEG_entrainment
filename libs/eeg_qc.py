@@ -1,6 +1,7 @@
 """EEG Quality Control for Specparam Analysis"""
 
 from dataclasses import dataclass
+import math
 from typing import Dict, List, Optional, Tuple
 import numpy as np
 from specparam import SpectralGroupModel
@@ -116,7 +117,7 @@ def check_channel_qc(
     # Use specparam's utility to extract alpha peak
     alpha_peak = get_band_peak(model, alpha_band, select_highest=True)
 
-    if alpha_peak.size > 0:
+    if alpha_peak.size > 0 and not math.isnan(alpha_peak[0]):
         alpha_cf, alpha_pw, alpha_bw = alpha_peak
         has_alpha = True
         
