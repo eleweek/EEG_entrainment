@@ -20,7 +20,7 @@ from libs.filters import filter_and_drop_dead_channels
 from libs.parse import parse_picks
 from libs.eeg_qc import check_session_qc, print_qc_report
 
-
+MAX_N_PEAKS=8
 
 def check_nans(data, nan_policy='zero'):
     """Check an array for nan values, and replace, based on policy."""
@@ -65,7 +65,7 @@ print(raw.ch_names)
 psd = raw.compute_psd(fmin=1.0, fmax=40.0, n_fft=int(raw.info['sfreq'] * 10))
 psd_values, psd_freqs = psd.get_data(return_freqs=True)
 
-fg = SpectralGroupModel()
+fg = SpectralGroupModel(max_n_peaks=MAX_N_PEAKS)
 print(psd_freqs.shape, psd_values.shape)
 fg.report(psd_freqs, psd_values, [3, 40])
 print("\n" + "="*60)
@@ -172,7 +172,7 @@ try:
             print("IAF (aperiodic-subtracted residual peak): {:.3f} Hz".format(float(iaf_hz)))
             # Also print all alpha peaks detected on the averaged residuals
             residual_peak_params, residual_peak_fit = detect_residual_peaks(
-                psd_freqs, mean_residual, peak_threshold=1.5, min_peak_height=0.0, verbose=False
+                psd_freqs, mean_residual, max_n_peaks=MAX_N_PEAKS, peak_threshold=1.5, min_peak_height=0.0, verbose=False
             )
             if residual_peak_params.size:
                 alpha_residual_peaks = residual_peak_params[
