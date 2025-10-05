@@ -169,7 +169,11 @@ try:
         if np.any(alpha_mask):
             peak_idx = np.argmax(mean_residual[alpha_mask])
             iaf_hz = psd_freqs[alpha_mask][peak_idx]
-            print("IAF (aperiodic-subtracted residual peak): {:.3f} Hz".format(float(iaf_hz)))
+            iaf_residual_log10 = float(mean_residual[alpha_mask][peak_idx])
+
+            iaf_residual_db = 10.0 * iaf_residual_log10
+            print("IAF (aperiodic-adjusted residual peak): {:.3f} Hz @ {:.2f} dB".format(float(iaf_hz), iaf_residual_db))
+
             # Also print all alpha peaks detected on the averaged residuals
             residual_peak_params, residual_peak_fit = detect_residual_peaks(
                 psd_freqs, mean_residual, max_n_peaks=MAX_N_PEAKS, peak_threshold=1.5, min_peak_height=0.0, verbose=False
