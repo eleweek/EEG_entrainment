@@ -18,6 +18,7 @@ from specparam.sim.gen import gen_periodic
 from libs.file_formats import load_raw_xdf
 from libs.filters import filter_and_drop_dead_channels
 from libs.parse import parse_picks
+from libs.eeg_qc import check_session_qc, print_qc_report
 
 
 
@@ -67,6 +68,25 @@ psd_values, psd_freqs = psd.get_data(return_freqs=True)
 fg = SpectralGroupModel()
 print(psd_freqs.shape, psd_values.shape)
 fg.report(psd_freqs, psd_values, [3, 40])
+print("\n" + "="*60)
+print("RUNNING QUALITY CONTROL")
+print("="*60)
+
+qc_results = check_session_qc(
+    fg,
+    channel_names=raw.ch_names,
+    posterior_channels=['O1', 'Oz', 'O2'],
+    max_posterior_iaf_std=0.5,
+)
+
+print_qc_report(qc_results)
+
+# Exit early if critical QC failures
+if not qc_results.passed:
+    print("\n⚠️  WARNING: QC checks failed. Review issues above.")
+    print("Consider excluding this recording or channels from analysis.\n")
+    # Uncomment to exit on failure:
+    # sys.exit(1)
 
 # Compute IAF by subtracting each channel's aperiodic model, averaging residuals, and finding peak
 def _aperiodic_log10_from_params(freqs, params):
