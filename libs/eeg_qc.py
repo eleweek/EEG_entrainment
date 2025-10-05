@@ -49,7 +49,9 @@ def check_channel_qc(
     channel_idx: int,
     channel_name: str,
     alpha_band: Tuple[float, float] = (7.0, 14.0),
-    exponent_range: Tuple[float, float] = (0.5, 3.0),
+    # The exponent range is a bit wider range of plausible ranges from:
+    # https://pmc.ncbi.nlm.nih.gov/articles/PMC8800045/
+    exponent_range: Tuple[float, float] = (0.7, 2.75),
     min_r_squared: float = 0.90,
     min_alpha_snr: float = 1.5,
 ) -> ChannelQC:
