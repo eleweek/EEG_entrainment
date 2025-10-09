@@ -351,7 +351,7 @@ def run_one_trial(
     pygame.display.flip()
 
     # LSL markers: trial header
-    push_marker(outlet, "trial_start", trial=trial_index, cond=cond,
+    push_marker(outlet, "trial_start", trial=trial_index, block=block, cond=cond,
                 angle=angle_deg, snr_level=stimcfg.snr_level, snr_jitter=snr_jitter,
                 seed=seed, delay_cycles=delay_cycles)
 
@@ -376,7 +376,7 @@ def run_one_trial(
                     correct = (said_left == is_left_correct)
                     timed_out = False
                     response_enabled = False
-                    push_marker(outlet, "response", trial=trial_index,
+                    push_marker(outlet, "response", trial=trial_index, block=block,
                                 resp=('L' if said_left else 'R'), correct=bool(correct), rt_ms=rt_ms)
                     phase = Phase.FB
                     fb_deadline = time.perf_counter() + task.feedback_ms/1000.0
@@ -388,18 +388,18 @@ def run_one_trial(
             phase = Phase.FLICK
 
         elif phase == Phase.FLICK:
-            push_marker(outlet, "flicker_start", trial=trial_index, freq=task.freq_hz, cycles=task.cycles)
+            push_marker(outlet, "flicker_start", trial=trial_index, block=block, freq=task.freq_hz, cycles=task.cycles)
             # keep fixation dot overlayed on OFF frames (optional)
             def _overlay_off(surf: pygame.Surface):
                 draw_fixation_dot(surf, center_screen)
             run_flicker(screen, flicker_rect,
                         frequency=task.freq_hz, target_min_refresh_rate=80.0, target_max_refresh_rate=125.0,
                         cycles=task.cycles, report_every=10_000, overlay_off_frame=_overlay_off)
-            push_marker(outlet, "flicker_end", trial=trial_index)
+            push_marker(outlet, "flicker_end", trial=trial_index, block=block)
             phase = Phase.DELAY
 
         elif phase == Phase.DELAY:
-            push_marker(outlet, "delay_start", trial=trial_index, delay_cycles=delay_cycles)
+            push_marker(outlet, "delay_start", trial=trial_index, block=block, delay_cycles=delay_cycles)
             target = now + (delay_cycles / task.freq_hz)
             while time.perf_counter() < target and phase == Phase.DELAY:
                 pygame.event.pump()
@@ -414,10 +414,10 @@ def run_one_trial(
                 draw_fixation_dot(screen, center_screen, color=(0,0,255))
 
             pygame.event.clear()                   # drop any pre-onset key presses
-            ts_on_req = push_marker(outlet, "stim_onset_req", trial=trial_index,
+            ts_on_req = push_marker(outlet, "stim_onset_req", trial=trial_index, block=block,
                                     angle=angle_deg, snr=snr_trial, stim_hash=stim_hash)
             pygame.display.flip()                  # stimulus appears
-            push_marker(outlet, "stim_flip_done", trial=trial_index)
+            push_marker(outlet, "stim_flip_done", trial=trial_index, block=block)
 
             stim_on_t = time.perf_counter()
             response_enabled = True
@@ -443,13 +443,13 @@ def run_one_trial(
                 rt_ms = -1
                 response_enabled = False
 
-                push_marker(outlet, "response", trial=trial_index, resp='none', correct=False, rt_ms=-1, timeout=True)
+                push_marker(outlet, "response", trial=trial_index, block=block, resp='none', correct=False, rt_ms=-1, timeout=True)
                 phase = Phase.FB
                 fb_deadline = now + task.feedback_ms/1000.0
 
         elif phase == Phase.FB:
             screen.fill((0,0,0))
-            push_marker(outlet, "feedback_start", trial=trial_index)
+            push_marker(outlet, "feedback_start", trial=trial_index, block=block)
             draw_fixation_dot(screen, center_screen)
             if not timed_out and task.show_feedback:
                 (glyph_tick if correct else glyph_cross)(screen, center_screen)
@@ -497,7 +497,7 @@ def run_one_trial(
                    ts_onset=ts_onset, ts_resp=ts_resp)
         insert_trial(db, row)
 
-    push_marker(outlet, "trial_end", trial=trial_index, correct=bool(correct), timeout=bool(timed_out))
+    push_marker(outlet, "trial_end", trial=trial_index, block=block, correct=bool(correct), timeout=bool(timed_out))
     return resp_key, correct, rt_ms, timed_out
 
 def sample_abs_jitter(min_abs: float, max_abs: float) -> float:
