@@ -36,6 +36,7 @@ class StimulusConfig:
     density: float = 0.03
     snr_level: float = 0.24               # base; add ±1–3% jitter per trial
     handed: str = "cw"                    # your generator option
+    dot_shape: str = "circle"             # circle | square (default circle)
 
 class Phase(enum.Enum):
     FIX   = 0
@@ -317,7 +318,8 @@ def run_one_trial(
     draw_glass(
         stim, center=(aperture_rect.w//2, aperture_rect.h//2), size=aperture_rect.w,
         angle_deg=angle_deg, snr=snr_trial, density=stimcfg.density,
-        shift=stimcfg.shift_px, dot_r=stimcfg.dot_r_px, handed=stimcfg.handed, seed=seed
+        shift=stimcfg.shift_px, dot_r=stimcfg.dot_r_px, handed=stimcfg.handed, seed=seed,
+        shape=stimcfg.dot_shape
     )
 
     # Hash & (later) save PNG

@@ -18,25 +18,40 @@ def parse_args():
                     help="Window/aperture size in pixels (square). Default 800.")
     ap.add_argument("--handed", choices=["cw","ccw"], default="cw",
                     help="Spiral handedness for 0<angle<90. Default cw.")
+    ap.add_argument("--shape", choices=["circle","square"], default="circle",
+                    help="Dot shape. Default circle.")
     ap.add_argument("--seed", type=int, default=None, help="Random seed.")
     ap.add_argument("output", nargs="?", help="If provided, save PNG to this path and exit.")
     return ap.parse_args()
 
-def compute_num_dipoles(ap_size, dot_r, density):
-    # density ≈ (total dot area) / aperture area  =>  N ≈ density*Area / (2*pi*r^2)
+def compute_num_dipoles(ap_size, dot_r, density, shape: str = "circle"):
+    # density ≈ (total dot area) / aperture area  =>  N ≈ density*Area / (2*area_per_dot)
     area = ap_size * ap_size
-    single_dot_area = math.pi * (dot_r**2)
+    if shape == "square":
+        # Interpret dot_r as half-side; side = 2*dot_r
+        single_dot_area = (2.0 * dot_r) * (2.0 * dot_r)
+    else:
+        single_dot_area = math.pi * (dot_r**2)
     n = int(max(1, round((density * area) / (2.0 * single_dot_area))))
     return n
 
-def draw_glass(surface, center, size, angle_deg, snr, density, shift, dot_r, handed, seed=None):
+def draw_dot_square(surf, color, center_xy, half_side):
+    cx_i = int(round(center_xy[0]))
+    cy_i = int(round(center_xy[1]))
+    hs = int(round(half_side))
+    # Ensure at least 1x1
+    side = max(1, 2*hs)
+    rect = pygame.Rect(cx_i - hs, cy_i - hs, side, side)
+    pygame.draw.rect(surf, color, rect)
+
+def draw_glass(surface, center, size, angle_deg, snr, density, shift, dot_r, handed, seed=None, shape: str = "circle"):
     if seed is not None:
         random.seed(seed)
     w = h = size
     cx, cy = center
 
     # Precompute counts and margins
-    N = compute_num_dipoles(size, dot_r, density)
+    N = compute_num_dipoles(size, dot_r, density, shape)
     N_signal = int(round(snr * N))
     N_noise = N - N_signal
     half_shift = shift / 2.0
@@ -87,7 +102,8 @@ def draw_glass(surface, center, size, angle_deg, snr, density, shift, dot_r, han
     random.shuffle(dipoles)
 
     # Draw all dots
-    draw_dot = pygame.draw.circle
+    draw_dot_circle = pygame.draw.circle
+
     for (pos, ori) in dipoles:
         (x1, y1), (x2, y2) = place_dipole(pos, ori)
 
@@ -97,8 +113,12 @@ def draw_glass(surface, center, size, angle_deg, snr, density, shift, dot_r, han
         if not (dot_r <= x2 < w - dot_r and dot_r <= y2 < h - dot_r): 
             continue
 
-        draw_dot(surface, (255,255,255), (int(round(x1)), int(round(y1))), dot_r)
-        draw_dot(surface, (255,255,255), (int(round(x2)), int(round(y2))), dot_r)
+        if shape == "square":
+            draw_dot_square(surface, (255,255,255), (x1, y1), dot_r)
+            draw_dot_square(surface, (255,255,255), (x2, y2), dot_r)
+        else:
+            draw_dot_circle(surface, (255,255,255), (int(round(x1)), int(round(y1))), dot_r)
+            draw_dot_circle(surface, (255,255,255), (int(round(x2)), int(round(y2))), dot_r)
 
 def main():
     args = parse_args()
@@ -111,7 +131,7 @@ def main():
         surface = pygame.Surface((args.size, args.size))
         draw_glass(surface, (args.size//2, args.size//2), args.size,
                    float(args.angle), args.snr, args.density, args.shift,
-                   args.dotsize, args.handed, args.seed)
+                   args.dotsize, args.handed, args.seed, args.shape)
         pygame.image.save(surface, outfile)
         print(f"Saved: {outfile}")
         pygame.quit()
@@ -126,10 +146,11 @@ def main():
     seed = args.seed
 
     def refresh(seed_override=None):
-        title = f"Glass pattern | angle={angle:.1f}° ({handed})  SNR={args.snr:.2f}  density={args.density:.2f}  shift={args.shift}px  dotsize={args.dotsize}px"
+        title = f"Glass pattern | angle={angle:.1f}° ({handed})  SNR={args.snr:.2f}  density={args.density:.2f}  shift={args.shift}px  dotsize={args.dotsize}px  shape={args.shape}"
         pygame.display.set_caption(title)
         draw_glass(screen, (args.size//2, args.size//2), args.size, angle,
-                   args.snr, args.density, args.shift, args.dotsize, handed, seed_override if seed_override is not None else seed)
+                   args.snr, args.density, args.shift, args.dotsize, handed,
+                   seed_override if seed_override is not None else seed, args.shape)
         pygame.display.flip()
 
     refresh()
