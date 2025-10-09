@@ -9,8 +9,8 @@ import pygame
 from pylsl import StreamInfo, StreamOutlet, local_clock
 
 
-from flicker import run_flicker          # your pulse-train function
-from glass   import draw_glass           # your Glass generator (draws onto a Surface)
+from flicker import run_flicker          # pulse-train function
+from glass   import draw_glass           # Glass generator (draws onto a Surface)
 
 # ============================ Config / Dataclasses ============================
 
@@ -29,10 +29,10 @@ class TaskConfig:
 
 @dataclass
 class StimulusConfig:
-    aperture_side_px: int = 412           # ~7.9° in your earlier example
-    flicker_side_px: int = 412            # square pulse patch
+    aperture_side_px: int = 402           # ~7.9°
+    flicker_side_px: int = 402            # square pulse patch
     dot_r_px: int = 1                     # 2 px diameter
-    shift_px: int = 14                    # ~16.2' at your ppd
+    shift_px: int = 14                    # ~16.2'
     density: float = 0.03
     snr_level: float = 0.24               # base; add ±1–3% jitter per trial
     handed: str = "cw"                    # your generator option
