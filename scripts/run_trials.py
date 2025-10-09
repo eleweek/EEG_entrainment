@@ -36,7 +36,7 @@ class StimulusConfig:
     density: float = 0.03
     snr_level: float = 0.24               # base; add ±1–3% jitter per trial
     handed: str = "cw"                    # your generator option
-    dot_shape: str = "circle"             # circle | square (default circle)
+    dot_shape: str = "square"             # circle | square
 
 class Phase(enum.Enum):
     FIX   = 0
