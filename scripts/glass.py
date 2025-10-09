@@ -10,16 +10,18 @@ def parse_args():
                     help="Signal fraction (0..1). Default 0.24 (~24%%).")
     ap.add_argument("--density", type=float, default=0.03,
                     help="Approx. dot area density (0..1). Default 0.03 (~3%%).")
-    ap.add_argument("--shift", type=float, default=8.0,
-                    help="Glass shift (pixels) between dots in a dipole. Default 8.")
-    ap.add_argument("--dotsize", type=int, default=2,
-                    help="Dot radius in pixels. Default 2.")
-    ap.add_argument("--size", type=int, default=800,
-                    help="Window/aperture size in pixels (square). Default 800.")
+    ap.add_argument("--shift", type=float, default=14.0,
+                    help="Glass shift (pixels) between dots in a dipole. Default 14 (matches run_trials).")
+    ap.add_argument("--dotr", type=int, default=1,
+                    help="Dot radius in pixels. Default 1 (2 px diameter; matches run_trials).")
+    ap.add_argument("--size", type=int, default=412,
+                    help="Aperture size in pixels (square). Default 412 (matches run_trials).")
     ap.add_argument("--handed", choices=["cw","ccw"], default="cw",
                     help="Spiral handedness for 0<angle<90. Default cw.")
     ap.add_argument("--shape", choices=["circle","square"], default="circle",
                     help="Dot shape. Default circle.")
+    ap.add_argument("--fullscreen", action="store_true",
+                    help="Open in fullscreen (scaled) instead of a window.")
     ap.add_argument("--seed", type=int, default=None, help="Random seed.")
     ap.add_argument("output", nargs="?", help="If provided, save PNG to this path and exit.")
     return ap.parse_args()
@@ -131,13 +133,25 @@ def main():
         surface = pygame.Surface((args.size, args.size))
         draw_glass(surface, (args.size//2, args.size//2), args.size,
                    float(args.angle), args.snr, args.density, args.shift,
-                   args.dotsize, args.handed, args.seed, args.shape)
+                   args.dotr, args.handed, args.seed, args.shape)
         pygame.image.save(surface, outfile)
         print(f"Saved: {outfile}")
         pygame.quit()
         return 0
 
-    screen = pygame.display.set_mode((args.size, args.size))
+    flags = 0
+    ap_surface = None
+    if args.fullscreen:
+        flags |= pygame.SCALED | pygame.FULLSCREEN | pygame.DOUBLEBUF | pygame.HWSURFACE
+        # Match run_trials style: fullscreen 1920x1080, vsync on
+        screen = pygame.display.set_mode((1920, 1080), flags=flags, vsync=1)
+        screen_w, screen_h = screen.get_size()
+        ap_size = args.size
+        ap_surface = pygame.Surface((ap_size, ap_size))
+    else:
+        # Windowed mode: restore original behavior (square window of --size)
+        screen = pygame.display.set_mode((args.size, args.size))
+        screen_w, screen_h = screen.get_size()
     pygame.display.set_caption("Glass pattern")
     clock = pygame.time.Clock()
 
@@ -146,11 +160,21 @@ def main():
     seed = args.seed
 
     def refresh(seed_override=None):
-        title = f"Glass pattern | angle={angle:.1f}° ({handed})  SNR={args.snr:.2f}  density={args.density:.2f}  shift={args.shift}px  dotsize={args.dotsize}px  shape={args.shape}"
+        title = f"Glass pattern | angle={angle:.1f}° ({handed})  SNR={args.snr:.2f}  density={args.density:.2f}  shift={args.shift}px  dotr={args.dotr}px  shape={args.shape}"
         pygame.display.set_caption(title)
-        draw_glass(screen, (args.size//2, args.size//2), args.size, angle,
-                   args.snr, args.density, args.shift, args.dotsize, handed,
-                   seed_override if seed_override is not None else seed, args.shape)
+        if ap_surface is None:
+            # Direct draw into window (square)
+            draw_glass(screen, (screen_w//2, screen_h//2), screen_w, angle,
+                       args.snr, args.density, args.shift, args.dotr, handed,
+                       seed_override if seed_override is not None else seed, args.shape)
+        else:
+            # Draw into square surface and center on fullscreen 1920x1080
+            draw_glass(ap_surface, (ap_size//2, ap_size//2), ap_size, angle,
+                       args.snr, args.density, args.shift, args.dotr, handed,
+                       seed_override if seed_override is not None else seed, args.shape)
+            screen.fill((0,0,0))
+            topleft = ((screen_w - ap_size)//2, (screen_h - ap_size)//2)
+            screen.blit(ap_surface, topleft)
         pygame.display.flip()
 
     refresh()
