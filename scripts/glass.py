@@ -34,6 +34,7 @@ def compute_num_dipoles(ap_size, dot_r, density, shape: str = "circle"):
         single_dot_area = (2.0 * dot_r) * (2.0 * dot_r)
     else:
         single_dot_area = math.pi * (dot_r**2)
+    # Each dipole has two dots, so dividing by 2
     n = int(max(1, round((density * area) / (2.0 * single_dot_area))))
     return n
 
