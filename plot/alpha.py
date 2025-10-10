@@ -37,7 +37,7 @@ separate_channels = args.separate_channels
 
 # Define frequency bands of interest
 bands = Bands({'theta': [3, 7],
-               'alpha': [7, 14],
+               'alpha': [7, 13],
                'beta': [15, 30]})
 
 def iaf_original(psd):
