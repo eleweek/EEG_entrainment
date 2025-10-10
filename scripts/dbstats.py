@@ -48,6 +48,37 @@ def count_records(conn: sqlite3.Connection) -> int:
     return 0
 
 
+def count_unique_condition_participant_pairs(conn: sqlite3.Connection) -> int:
+    # Requires both tables to exist
+    if not (table_exists(conn, "trial") and table_exists(conn, "session")):
+        return 0
+    row = conn.execute(
+        """
+        SELECT COUNT(*) FROM (
+            SELECT DISTINCT s.participant_id, t.cond
+            FROM trial t
+            JOIN session s ON s.id = t.session_id
+            WHERE s.participant_id IS NOT NULL AND TRIM(s.participant_id) <> ''
+              AND t.cond IS NOT NULL AND TRIM(t.cond) <> ''
+        ) AS distinct_pairs
+        """
+    ).fetchone()
+    return int(row[0] if row and row[0] is not None else 0)
+
+
+def count_unique_conditions(conn: sqlite3.Connection) -> int:
+    if not table_exists(conn, "trial"):
+        return 0
+    row = conn.execute(
+        """
+        SELECT COUNT(DISTINCT cond)
+        FROM trial
+        WHERE cond IS NOT NULL AND TRIM(cond) <> ''
+        """
+    ).fetchone()
+    return int(row[0] if row and row[0] is not None else 0)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Print database stats without revealing blinded conditions."
@@ -64,12 +95,16 @@ def main() -> None:
     try:
         participants = count_unique_participants(conn)
         records = count_records(conn)
+        num_conditions = count_unique_conditions(conn)
+        cond_participant_pairs = count_unique_condition_participant_pairs(conn)
     finally:
         conn.close()
 
     # Intentionally do not print any breakdowns by condition to preserve blinding
     print(f"participants: {participants}")
     print(f"records: {records}")
+    print(f"conditions: {num_conditions}")
+    print(f"condition-participant pairs: {cond_participant_pairs}")
 
 
 if __name__ == "__main__":
