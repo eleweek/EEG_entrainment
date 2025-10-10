@@ -49,12 +49,11 @@ def check_channel_qc(
     fg: SpectralGroupModel,
     channel_idx: int,
     channel_name: str,
-    alpha_band: Tuple[float, float] = (7.0, 14.0),
+    alpha_band: Tuple[float, float] = (7.0, 13.0),
     # The exponent range is a bit wider range of plausible ranges from:
     # https://pmc.ncbi.nlm.nih.gov/articles/PMC8800045/
     exponent_range: Tuple[float, float] = (0.5, 3.0),
-    min_r_squared: float = 0.90,
-    min_alpha_snr: float = 1.5,
+    min_r_squared: float = 0.87,
 ) -> ChannelQC:
     """Run QC checks on a single channel.
     
@@ -72,8 +71,6 @@ def check_channel_qc(
         Acceptable (min, max) for aperiodic exponent
     min_r_squared : float
         Minimum acceptable R² for model fit
-    min_alpha_snr : float
-        Minimum SNR for alpha peak (peak_power / median_band_power)
     
     Returns
     -------
@@ -204,16 +201,43 @@ def check_session_qc(
                 f"(IAFs: {', '.join(f'{x:.2f}' for x in posterior_iafs)})"
             )
     
-    if posterior_alpha_present < len([ch for ch in posterior_channels if ch in channel_names]):
+    posterior_in_session = [ch for ch in posterior_channels if ch in channel_names]
+    posterior_missing = len(posterior_in_session) - posterior_alpha_present
+    if posterior_missing == 1:
+        warnings.append(
+            f"Only {posterior_alpha_present}/{len(posterior_in_session)} posterior channels have alpha peak"
+        )
+    elif posterior_missing >= 2:
         summary.append(
-            f"Only {posterior_alpha_present}/{len(posterior_channels)} "
-            f"posterior channels have alpha peak"
+            f"Only {posterior_alpha_present}/{len(posterior_in_session)} posterior channels have alpha peak"
         )
     
     # Overall pass/fail
-    failed_channels = [name for name, qc in channel_qc.items() if not qc.passed]
+    # Separate channels that are failing only due to missing alpha from other failures
+    alpha_missing_only = []
+    other_failed = []
+    for name, qc in channel_qc.items():
+        if not qc.has_alpha:
+            other_issues = [
+                msg for msg in qc.issues
+                if msg not in ("No alpha peak detected", "No peaks detected at all")
+            ]
+            if len(other_issues) == 0:
+                alpha_missing_only.append(name)
+            else:
+                other_failed.append(name)
+        elif not qc.passed:
+            other_failed.append(name)
+
+    failed_channels = list(other_failed)
+    if len(alpha_missing_only) >= 2:
+        failed_channels.extend(alpha_missing_only)
+
     passed = len(failed_channels) == 0 and len(summary) == 0
-    
+
+    if len(alpha_missing_only) == 1:
+        warnings.append(f"Alpha missing on 1 channel: {alpha_missing_only[0]}")
+
     if failed_channels:
         summary.insert(0, f"Failed channels: {', '.join(failed_channels)}")
     
@@ -243,6 +267,13 @@ def print_qc_report(qc: SessionQC):
         print("Summary Issues:")
         for issue in qc.summary:
             print(f"  • {issue}")
+        print()
+    
+    # Warnings
+    if qc.warnings:
+        print("Warnings:")
+        for warn in qc.warnings:
+            print(f"  • {warn}")
         print()
     
     # Posterior consistency

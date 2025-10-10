@@ -41,7 +41,7 @@ def check_nans(data, nan_policy='zero'):
 
 # Define frequency bands of interest
 bands = Bands({'theta': [3, 7],
-               'alpha': [7, 14],
+               'alpha': [7, 13],
                'beta': [15, 30]})
 
 parser = argparse.ArgumentParser(
@@ -173,7 +173,7 @@ try:
 
             iaf_residual_db = 10.0 * iaf_residual_log10
             print("IAF (aperiodic-adjusted residual peak): {:.3f} Hz @ {:.2f} dB".format(float(iaf_hz), iaf_residual_db))
-
+            print("\n\n")
             # Also print all alpha peaks detected on the averaged residuals
             residual_peak_params, residual_peak_fit = detect_residual_peaks(
                 psd_freqs, mean_residual, max_n_peaks=MAX_N_PEAKS, peak_threshold=1.5, min_peak_height=0.0, verbose=False
@@ -203,8 +203,6 @@ for ind, (label, band_def) in enumerate(bands):
 
     # Get the power values across channels for the current band
     band_power = check_nans(get_band_peak_group(fg, band_def)[:, 1])
-    print("Band def", band_def)
-    print("Band power", band_power.shape, band_power)
 
     # Create a topomap for the current oscillation band
     mne.viz.plot_topomap(band_power, raw.info, cmap=cm.viridis, contours=0, axes=axes[ind], show=False)
