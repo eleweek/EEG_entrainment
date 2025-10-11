@@ -466,7 +466,7 @@ def run_one_trial(
             if time.perf_counter() >= fb_deadline:
                 phase = Phase.ITI
                 jitter = random.randint(-task.iti_jitter_ms, task.iti_jitter_ms)
-                iti_deadline = time.perf_counter() + (task.iti_ms - task.feedback_ms + jitter)/1000.0
+                iti_deadline = time.perf_counter() + (task.iti_ms + jitter)/1000.0
 
         elif phase == Phase.ITI:
             if time.perf_counter() >= iti_deadline:
