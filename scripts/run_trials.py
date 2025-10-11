@@ -61,6 +61,10 @@ def glyph_cross(screen, c):
     pygame.draw.line(screen,(200,80,80),(c[0]-10,c[1]-10),(c[0]+10,c[1]+10),3)
     pygame.draw.line(screen,(200,80,80),(c[0]-10,c[1]+10),(c[0]+10,c[1]-10),3)
 
+# Grey minus for timeouts
+def glyph_minus(screen, c):
+    pygame.draw.line(screen,(160,160,160),(c[0]-10,c[1]),(c[0]+10,c[1]),3)
+
 # ============================ Argparse validators =============================
 
 def parse_cond_seq(value: str) -> str:
@@ -453,8 +457,11 @@ def run_one_trial(
             screen.fill((0,0,0))
             push_marker(outlet, "feedback_start", trial=trial_index, block=block)
             draw_fixation_dot(screen, center_screen)
-            if not timed_out and task.show_feedback:
-                (glyph_tick if correct else glyph_cross)(screen, center_screen)
+            if task.show_feedback:
+                if timed_out:
+                    glyph_minus(screen, center_screen)
+                else:
+                    (glyph_tick if correct else glyph_cross)(screen, center_screen)
             pygame.display.flip()
             if time.perf_counter() >= fb_deadline:
                 phase = Phase.ITI
@@ -479,14 +486,13 @@ def run_one_trial(
     stim_id = None
     if db is not None:
         # save PNG if requested
-        if stim_out_dir:
-            stim_path = ensure_png(stim, stim_out_dir, stim_hash)
         meta = dict(hash=stim_hash, file_path=stim_path, angle_deg=angle_deg, snr_level=stimcfg.snr_level,
                     snr_jitter=snr_jitter, density=stimcfg.density, shift_px=stimcfg.shift_px,
                     dot_r_px=stimcfg.dot_r_px, handed=stimcfg.handed, seed=seed)
         stim_id = upsert_stimulus(db, meta)
+        if stim_out_dir:
+            stim_path = ensure_png(stim, stim_out_dir, stim_id)
 
-        # pull last response marker time if you want (here we use local perf counter deltas)
         ts_onset = None  # we could store the ts from stim_onset_req if needed—left None here
         ts_resp  = None
 
