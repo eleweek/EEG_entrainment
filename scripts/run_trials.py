@@ -486,13 +486,14 @@ def run_one_trial(
     stim_id = None
     if db is not None:
         # save PNG if requested
+        if stim_out_dir:
+            stim_path = ensure_png(stim, stim_out_dir, stim_hash)
         meta = dict(hash=stim_hash, file_path=stim_path, angle_deg=angle_deg, snr_level=stimcfg.snr_level,
                     snr_jitter=snr_jitter, density=stimcfg.density, shift_px=stimcfg.shift_px,
                     dot_r_px=stimcfg.dot_r_px, handed=stimcfg.handed, seed=seed)
         stim_id = upsert_stimulus(db, meta)
-        if stim_out_dir:
-            stim_path = ensure_png(stim, stim_out_dir, stim_id)
 
+        # pull last response marker time if you want (here we use local perf counter deltas)
         ts_onset = None  # we could store the ts from stim_onset_req if needed—left None here
         ts_resp  = None
 
