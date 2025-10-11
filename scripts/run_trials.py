@@ -179,7 +179,7 @@ def show_ready_screen(screen: pygame.Surface, outlet: Optional[StreamOutlet]):
 
         screen.fill((0,0,0))
         lines = [
-            "Press any key when you are ready",
+            "Press SPACE when you are ready",
             "",
             ("LSL marker stream is active." if outlet is not None else "(Run with --lsl to emit markers.)"),
             "Press ESC to quit"
