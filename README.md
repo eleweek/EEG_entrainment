@@ -1,5 +1,7 @@
 # EEG entrainment study replication
 
+(Sign up to be a volunteer in London)[https://forms.gle/X37zyTV3KhbSb3Ze9]
+
 This is the code for the [ACX Grants (2024)](https://www.astralcodexten.com/p/acx-grants-results-2024) EEG entrainment project replicating the study [“Learning at your brain’s rhythm: individualized entrainment boosts learning for perceptual decisions”](https://pubmed.ncbi.nlm.nih.gov/36352510/). In this study, a team at Cambridge claims that entrainment (flashing a bright white light) at a person's individual peak alpha frequency helps them learn to perform a certain difficult perceptual task faster. The task is discriminating between two types of Signal-in-noise patterns between each other: radial ones and concentric ones. 
 
 <img width="264" height="277" alt="image" src="https://github.com/user-attachments/assets/5f3b8fd1-ed8f-4bec-ad45-b834c81eb6d0" />
