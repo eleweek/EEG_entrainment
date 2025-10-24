@@ -41,7 +41,7 @@ def check_nans(data, nan_policy='zero'):
 
 # Define frequency bands of interest
 bands = Bands({'theta': [3, 7],
-               'alpha': [7, 13],
+               'alpha': [7, 14],
                'beta': [15, 30]})
 
 parser = argparse.ArgumentParser(
