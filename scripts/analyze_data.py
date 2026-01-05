@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import sqlite3
 from dataclasses import dataclass
 import pingouin as pg
@@ -59,16 +60,41 @@ def fit_learning_rate(blocks: np.ndarray, acc: np.ndarray) -> FitResult:
     return FitResult(a=float(a_hat), b=float(b_hat), a_se=a_se, b_se=b_se, r2=r2, n_points=len(blocks))
 
 
-def load_trials_pilot_only(db_path: str) -> pd.DataFrame:
+def load_trials(
+    db_path: str,
+    include_only: list[str] | None = None,
+    exclude: list[str] | None = None
+) -> pd.DataFrame:
     """
-    Load only pilot participants' trials (p001, p002) from the SQLite DB.
+    Load trials from the SQLite DB, optionally filtering by participant IDs.
+
+    Args:
+        db_path: Path to the SQLite database
+        include_only: If provided, only load these participant IDs
+        exclude: If provided, exclude these participant IDs
 
     Returns columns:
       participant_id, session_id, start_ts, block, cond, correct
     """
     con = sqlite3.connect(db_path)
     try:
-        q = """
+        # Build WHERE clause based on filters
+        where_clauses = []
+        params = []
+
+        if include_only is not None and len(include_only) > 0:
+            placeholders = ",".join("?" * len(include_only))
+            where_clauses.append(f"s.participant_id IN ({placeholders})")
+            params.extend(include_only)
+
+        if exclude is not None and len(exclude) > 0:
+            placeholders = ",".join("?" * len(exclude))
+            where_clauses.append(f"s.participant_id NOT IN ({placeholders})")
+            params.extend(exclude)
+
+        where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+
+        q = f"""
         SELECT
             s.participant_id,
             s.id AS session_id,
@@ -79,10 +105,10 @@ def load_trials_pilot_only(db_path: str) -> pd.DataFrame:
             t.correct
         FROM trial t
         JOIN session s ON s.id = t.session_id
-        WHERE s.participant_id IN ('p001', 'p002')
+        {where_sql}
         ORDER BY s.participant_id, s.start_ts, t.block, t.trial_index
         """
-        df = pd.read_sql_query(q, con)
+        df = pd.read_sql_query(q, con, params=params)
     finally:
         con.close()
 
@@ -113,21 +139,6 @@ def add_day_index(df_trials: pd.DataFrame) -> pd.DataFrame:
         sessions, on=["participant_id", "session_id", "start_ts"], how="left"
     )
 
-
-df = load_trials_pilot_only("study.db")
-print(df.shape)          # (rows, columns)
-print(len(df))           # number of rows
-print(df.size)           # rows * columns
-print(df["participant_id"].nunique())  # how many participants in it
-print(df["session_id"].nunique())      # how many sessions in it
-
-df = add_day_index(df)
-
-block_acc = (
-    df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
-    .mean()
-    .reset_index(name="accuracy")
-)
 
 def fit_slopes_per_session(block_acc: pd.DataFrame) -> pd.DataFrame:
     rows = []
@@ -283,12 +294,95 @@ def run_h2_between_groups_day1(slopes: pd.DataFrame, n_perm: int = 10000, seed: 
     print(f"Permutation p (one-sided, {n_perm} perms): {p_perm:.6g}")
 
 
+def parse_participant_list(value: str | None) -> list[str] | None:
+    """Parse comma-separated participant IDs like 'p001,p002'."""
+    if value is None or value.strip() == "":
+        return None
+    return [p.strip() for p in value.split(",") if p.strip()]
 
-slopes = fit_slopes_per_session(block_acc)
 
-# Print a quick check of fitted rows
-print("\n=== Fitted slopes ===")
-print(slopes.sort_values(["participant_id", "day_index", "cond"]).to_string(index=False))
+def main():
+    parser = argparse.ArgumentParser(
+        description="Analyze learning rate data from Glass pattern experiment"
+    )
+    parser.add_argument(
+        "--db",
+        type=str,
+        default="study.db",
+        help="Path to SQLite database (default: study.db)"
+    )
+    parser.add_argument(
+        "--include-only-participants",
+        type=str,
+        default=None,
+        help="Comma-separated list of participant IDs to include (e.g., 'p001,p002')"
+    )
+    parser.add_argument(
+        "--exclude-participants",
+        type=str,
+        default=None,
+        help="Comma-separated list of participant IDs to exclude (e.g., 'p001,p002')"
+    )
+    parser.add_argument(
+        "--n-permutations",
+        type=int,
+        default=10000,
+        help="Number of permutations for H2 permutation test (default: 10000)"
+    )
+    parser.add_argument(
+        "--permutation-seed",
+        type=int,
+        default=42,
+        help="Random seed for permutation test (default: 42)"
+    )
 
-run_h1_within_subject(slopes)
-run_h2_between_groups_day1(slopes, n_perm=10000, seed=42)
+    args = parser.parse_args()
+
+    # Parse participant filters
+    include_only = parse_participant_list(args.include_only_participants)
+    exclude = parse_participant_list(args.exclude_participants)
+
+    # Validate mutually exclusive options
+    if include_only is not None and exclude is not None:
+        parser.error("Cannot use both --include-only-participants and --exclude-participants")
+
+    # Load data
+    print(f"Loading trials from {args.db}...")
+    if include_only:
+        print(f"  Including only: {', '.join(include_only)}")
+    if exclude:
+        print(f"  Excluding: {', '.join(exclude)}")
+
+    df = load_trials(args.db, include_only=include_only, exclude=exclude)
+
+    print(f"Loaded {df.shape[0]} trials from {df['participant_id'].nunique()} participants "
+          f"across {df['session_id'].nunique()} sessions")
+
+    if df.empty:
+        print("No data loaded. Exiting.")
+        return
+
+    # Add day index
+    df = add_day_index(df)
+
+    # Compute block accuracies
+    block_acc = (
+        df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
+        .mean()
+        .reset_index(name="accuracy")
+    )
+
+    # Fit learning rates
+    slopes = fit_slopes_per_session(block_acc)
+
+    # Print fitted slopes
+    print("\n=== Fitted slopes ===")
+    print(slopes.sort_values(["participant_id", "day_index", "cond"]).to_string(index=False))
+
+    # Run hypothesis tests
+    run_h1_within_subject(slopes)
+    run_h2_between_groups_day1(slopes, n_perm=args.n_permutations, seed=args.permutation_seed)
+
+
+if __name__ == "__main__":
+    main()
