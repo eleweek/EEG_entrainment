@@ -254,13 +254,26 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
     """
     Create visualization of accuracy and learning rate fits for all participants.
 
-    Each participant gets one row with two subplots (Day 1 and Day 2).
-    Each subplot shows accuracy points and the fitted log-linear curve.
+    Layout: 4 columns per row
+      - Columns 0-1: P-first participant (Day 1, Day 2)
+      - Columns 2-3: T-first participant (Day 1, Day 2)
+    Two participants per row (one from each group).
     """
-    participants = sorted(block_acc["participant_id"].unique())
-    n_participants = len(participants)
+    # Determine each participant's first-day condition
+    day1_cond = (
+        slopes[slopes["day_index"] == 1][["participant_id", "cond"]]
+        .drop_duplicates()
+        .set_index("participant_id")["cond"]
+    )
 
-    fig, axes = plt.subplots(n_participants, 2, figsize=(10, 1.25 * n_participants), squeeze=False)
+    # Split participants by their Day 1 condition
+    p_first = sorted([pid for pid, c in day1_cond.items() if c == "P"])
+    t_first = sorted([pid for pid, c in day1_cond.items() if c == "T"])
+
+    n_rows = max(len(p_first), len(t_first))
+
+    # 4 columns: P-first Day1, P-first Day2, T-first Day1, T-first Day2
+    fig, axes = plt.subplots(n_rows, 4, figsize=(14, 1.25 * n_rows), squeeze=False)
 
     # Compute global y-axis range from data with small padding
     all_acc = block_acc["accuracy"].values
@@ -274,71 +287,103 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
     data_color = "#333333"
     fit_color = "#888888"
 
-    for row_idx, pid in enumerate(participants):
+    def plot_participant(ax, pid, day_idx, is_last_row):
+        if pid is None:
+            ax.set_visible(False)
+            return
+
         p_data = block_acc[block_acc["participant_id"] == pid]
         p_slopes = slopes[slopes["participant_id"] == pid]
 
-        for day_idx in [1, 2]:
-            col_idx = day_idx - 1
+        day_data = p_data[p_data["day_index"] == day_idx]
+        day_slope = p_slopes[p_slopes["day_index"] == day_idx]
+
+        if day_data.empty:
+            ax.set_visible(False)
+            return
+
+        blocks = day_data["block"].values
+        acc = day_data["accuracy"].values
+        cond = day_data["cond"].iloc[0]
+
+        # Plot accuracy points - small, direct
+        ax.scatter(blocks, acc, s=8, color=data_color, zorder=3)
+
+        # Plot fitted curve if we have slope data
+        fit_annotation = ""
+        if not day_slope.empty:
+            a = day_slope["a"].iloc[0]
+            b = day_slope["b"].iloc[0]
+            r2 = day_slope["r2"].iloc[0]
+
+            x_fit = np.linspace(1, 8, 100)
+            y_fit = log_linear(x_fit, a, b)
+            ax.plot(x_fit, y_fit, color=fit_color, linewidth=1.2, zorder=2)
+            fit_annotation = f"  b={b:.3f}, R²={r2:.2f}"
+
+        # Tufte-style: remove spines, keep only left and bottom
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#aaaaaa")
+        ax.spines["bottom"].set_color("#aaaaaa")
+        ax.spines["left"].set_linewidth(0.5)
+        ax.spines["bottom"].set_linewidth(0.5)
+
+        # Minimal ticks
+        ax.tick_params(axis="both", which="both", length=3, width=0.5, colors="#666666")
+
+        # Title with participant, day, condition and fit info
+        cond_label = "T-match" if cond == "T" else "P-match"
+        ax.set_title(f"{pid}, Day {day_idx} ({cond_label}){fit_annotation}",
+                     fontsize=9, loc="left", color="#333333")
+
+        ax.set_xlim(0.5, 8.5)
+        ax.set_ylim(y_min, y_max)
+        ax.set_xticks(range(1, 9))
+
+        if is_last_row:
+            ax.set_xlabel("Block", fontsize=8, color="#666666")
+        else:
+            ax.set_xticklabels([])
+
+    for row_idx in range(n_rows):
+        # P-first participant (columns 0, 1)
+        pid_p = p_first[row_idx] if row_idx < len(p_first) else None
+        # T-first participant (columns 2, 3)
+        pid_t = t_first[row_idx] if row_idx < len(t_first) else None
+
+        is_last_row = row_idx == n_rows - 1
+
+        # P-first: Day 1 (col 0), Day 2 (col 1)
+        plot_participant(axes[row_idx, 0], pid_p, 1, is_last_row)
+        plot_participant(axes[row_idx, 1], pid_p, 2, is_last_row)
+
+        # T-first: Day 1 (col 2), Day 2 (col 3)
+        plot_participant(axes[row_idx, 2], pid_t, 1, is_last_row)
+        plot_participant(axes[row_idx, 3], pid_t, 2, is_last_row)
+
+        # Y-axis labels only on leftmost of each group
+        for col_idx in range(4):
             ax = axes[row_idx, col_idx]
-
-            day_data = p_data[p_data["day_index"] == day_idx]
-            day_slope = p_slopes[p_slopes["day_index"] == day_idx]
-
-            if day_data.empty:
-                ax.set_visible(False)
-                continue
-
-            blocks = day_data["block"].values
-            acc = day_data["accuracy"].values
-            cond = day_data["cond"].iloc[0]
-
-            # Plot accuracy points - small, direct
-            ax.scatter(blocks, acc, s=8, color=data_color, zorder=3)
-
-            # Plot fitted curve if we have slope data
-            fit_annotation = ""
-            if not day_slope.empty:
-                a = day_slope["a"].iloc[0]
-                b = day_slope["b"].iloc[0]
-                r2 = day_slope["r2"].iloc[0]
-
-                x_fit = np.linspace(1, 8, 100)
-                y_fit = log_linear(x_fit, a, b)
-                ax.plot(x_fit, y_fit, color=fit_color, linewidth=1.2, zorder=2)
-                fit_annotation = f"  b={b:.3f}, R²={r2:.2f}"
-
-            # Tufte-style: remove spines, keep only left and bottom
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-            ax.spines["left"].set_color("#aaaaaa")
-            ax.spines["bottom"].set_color("#aaaaaa")
-            ax.spines["left"].set_linewidth(0.5)
-            ax.spines["bottom"].set_linewidth(0.5)
-
-            # Minimal ticks
-            ax.tick_params(axis="both", which="both", length=3, width=0.5, colors="#666666")
-
-            # Title with condition and fit info integrated
-            cond_label = "T-match" if cond == "T" else "P-match"
-            ax.set_title(f"{pid}, Day {day_idx}, {cond_label}{fit_annotation}",
-                         fontsize=9, loc="left", color="#333333")
-
-            ax.set_xlim(0.5, 8.5)
-            ax.set_ylim(y_min, y_max)
-            ax.set_xticks(range(1, 9))
-
-            # Only label axes on edges
-            if col_idx == 0:
+            if col_idx in (0, 2):
                 ax.set_ylabel("Accuracy", fontsize=8, color="#666666")
             else:
                 ax.set_yticklabels([])
-            if row_idx == n_participants - 1:
-                ax.set_xlabel("Block", fontsize=8, color="#666666")
-            else:
-                ax.set_xticklabels([])
 
-    fig.tight_layout()
+    # Add group headers at the top
+    fig.text(0.25, 0.99, "P-first", ha="center", va="top", fontsize=11, color="#333333")
+    fig.text(0.75, 0.99, "T-first", ha="center", va="top", fontsize=11, color="#333333")
+
+    # Adjust layout with gap between the two groups
+    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    fig.subplots_adjust(wspace=0.15, hspace=0.4)
+    # Add extra space between columns 1 and 2 (between P-first and T-first)
+    for row_idx in range(n_rows):
+        for col_idx in [2, 3]:
+            ax = axes[row_idx, col_idx]
+            pos = ax.get_position()
+            ax.set_position([pos.x0 + 0.03, pos.y0, pos.width, pos.height])
+
     return fig
 
 
