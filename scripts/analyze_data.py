@@ -7,6 +7,7 @@ import pingouin as pg
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy import stats
 
@@ -249,6 +250,98 @@ def permutation_pvalue_day1(xT: np.ndarray, xP: np.ndarray, n_resamples: int = 1
     return float(res.pvalue)
 
 
+def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> plt.Figure:
+    """
+    Create visualization of accuracy and learning rate fits for all participants.
+
+    Each participant gets one row with two subplots (Day 1 and Day 2).
+    Each subplot shows accuracy points and the fitted log-linear curve.
+    """
+    participants = sorted(block_acc["participant_id"].unique())
+    n_participants = len(participants)
+
+    fig, axes = plt.subplots(n_participants, 2, figsize=(10, 1.25 * n_participants), squeeze=False)
+
+    # Compute global y-axis range from data with small padding
+    all_acc = block_acc["accuracy"].values
+    y_min = all_acc.min()
+    y_max = all_acc.max()
+    y_padding = (y_max - y_min) * 0.05
+    y_min -= y_padding
+    y_max += y_padding
+
+    # Muted colors
+    data_color = "#333333"
+    fit_color = "#888888"
+
+    for row_idx, pid in enumerate(participants):
+        p_data = block_acc[block_acc["participant_id"] == pid]
+        p_slopes = slopes[slopes["participant_id"] == pid]
+
+        for day_idx in [1, 2]:
+            col_idx = day_idx - 1
+            ax = axes[row_idx, col_idx]
+
+            day_data = p_data[p_data["day_index"] == day_idx]
+            day_slope = p_slopes[p_slopes["day_index"] == day_idx]
+
+            if day_data.empty:
+                ax.set_visible(False)
+                continue
+
+            blocks = day_data["block"].values
+            acc = day_data["accuracy"].values
+            cond = day_data["cond"].iloc[0]
+
+            # Plot accuracy points - small, direct
+            ax.scatter(blocks, acc, s=8, color=data_color, zorder=3)
+
+            # Plot fitted curve if we have slope data
+            fit_annotation = ""
+            if not day_slope.empty:
+                a = day_slope["a"].iloc[0]
+                b = day_slope["b"].iloc[0]
+                r2 = day_slope["r2"].iloc[0]
+
+                x_fit = np.linspace(1, 8, 100)
+                y_fit = log_linear(x_fit, a, b)
+                ax.plot(x_fit, y_fit, color=fit_color, linewidth=1.2, zorder=2)
+                fit_annotation = f"  b={b:.3f}, R²={r2:.2f}"
+
+            # Tufte-style: remove spines, keep only left and bottom
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["left"].set_color("#aaaaaa")
+            ax.spines["bottom"].set_color("#aaaaaa")
+            ax.spines["left"].set_linewidth(0.5)
+            ax.spines["bottom"].set_linewidth(0.5)
+
+            # Minimal ticks
+            ax.tick_params(axis="both", which="both", length=3, width=0.5, colors="#666666")
+
+            # Title with condition and fit info integrated
+            cond_label = "T-match" if cond == "T" else "P-match"
+            ax.set_title(f"{pid}, Day {day_idx}, {cond_label}{fit_annotation}",
+                         fontsize=9, loc="left", color="#333333")
+
+            ax.set_xlim(0.5, 8.5)
+            ax.set_ylim(y_min, y_max)
+            ax.set_xticks(range(1, 9))
+
+            # Only label axes on edges
+            if col_idx == 0:
+                ax.set_ylabel("Accuracy", fontsize=8, color="#666666")
+            else:
+                ax.set_yticklabels([])
+            if row_idx == n_participants - 1:
+                ax.set_xlabel("Block", fontsize=8, color="#666666")
+            else:
+                ax.set_xticklabels([])
+
+    fig.tight_layout()
+    return fig
+
+
 def run_h2_between_groups_day1(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0) -> None:
     day1 = slopes[slopes["day_index"] == 1].copy()
 
@@ -382,6 +475,10 @@ def main():
     # Run hypothesis tests
     run_h1_within_subject(slopes)
     run_h2_between_groups_day1(slopes, n_perm=args.n_permutations, seed=args.permutation_seed)
+
+    # Visualize learning curves
+    visualize_learning_curves(block_acc, slopes)
+    plt.show()
 
 
 if __name__ == "__main__":
