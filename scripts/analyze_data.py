@@ -10,6 +10,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy import stats
+import statsmodels.api as sm
+from statsmodels.regression.quantile_regression import QuantReg
 
 
 # -----------------------------
@@ -29,9 +31,9 @@ class FitResult:
     n_points: int
 
 
-def fit_learning_rate(blocks: np.ndarray, acc: np.ndarray) -> FitResult:
+def fit_learning_rate_ols(blocks: np.ndarray, acc: np.ndarray) -> FitResult:
     """
-    Fit accuracy = a + b*log(block) using scipy.optimize.curve_fit.
+    Fit accuracy = a + b*log(block) using OLS (L2 loss).
 
     blocks: array of block indices (>=1)
     acc: array of accuracies in [0,1]
@@ -59,6 +61,52 @@ def fit_learning_rate(blocks: np.ndarray, acc: np.ndarray) -> FitResult:
     r2 = np.nan if ss_tot == 0 else 1.0 - ss_res / ss_tot
 
     return FitResult(a=float(a_hat), b=float(b_hat), a_se=a_se, b_se=b_se, r2=r2, n_points=len(blocks))
+
+
+def fit_learning_rate_l1(blocks: np.ndarray, acc: np.ndarray) -> FitResult:
+    """
+    Fit accuracy = a + b*log(block) using L1 loss (median regression).
+
+    blocks: array of block indices (>=1)
+    acc: array of accuracies in [0,1]
+    """
+    blocks = np.asarray(blocks, dtype=float)
+    acc = np.asarray(acc, dtype=float)
+
+    if len(blocks) != 8:
+        raise ValueError(f"Unexpected number of blocks {blocks}. Expected: 8")
+
+    # Design matrix: [1, log(block)]
+    X = sm.add_constant(np.log(blocks))
+
+    # Fit L1 (median regression)
+    model = QuantReg(acc, X)
+    result = model.fit(q=0.5)  # q=0.5 = median = L1
+
+    a_hat, b_hat = result.params
+    a_se, b_se = result.bse  # standard errors
+
+    # Pseudo-R² (1 - sum|residuals| / sum|y - median(y)|)
+    y_hat = result.fittedvalues
+    resid_abs = np.sum(np.abs(acc - y_hat))
+    total_abs = np.sum(np.abs(acc - np.median(acc)))
+    r2 = 1.0 - resid_abs / total_abs if total_abs > 0 else np.nan
+
+    return FitResult(a=float(a_hat), b=float(b_hat), a_se=float(a_se), b_se=float(b_se), r2=r2, n_points=len(blocks))
+
+
+def fit_learning_rate(blocks: np.ndarray, acc: np.ndarray, method: str = "ols") -> FitResult:
+    """
+    Fit accuracy = a + b*log(block).
+
+    method: "ols" (L2 loss) or "l1" (L1 loss / median regression)
+    """
+    if method == "ols":
+        return fit_learning_rate_ols(blocks, acc)
+    elif method == "l1":
+        return fit_learning_rate_l1(blocks, acc)
+    else:
+        raise ValueError(f"Unknown fit method: {method}. Use 'ols' or 'l1'.")
 
 
 def load_trials(
@@ -141,7 +189,7 @@ def add_day_index(df_trials: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def fit_slopes_per_session(block_acc: pd.DataFrame) -> pd.DataFrame:
+def fit_slopes_per_session(block_acc: pd.DataFrame, method: str = "ols") -> pd.DataFrame:
     rows = []
 
     for (pid, sid, day), sub in block_acc.groupby(["participant_id", "session_id", "day_index"], sort=True):
@@ -153,6 +201,7 @@ def fit_slopes_per_session(block_acc: pd.DataFrame) -> pd.DataFrame:
         fr = fit_learning_rate(
             sub["block"].to_numpy(float),
             sub["accuracy"].to_numpy(float),
+            method=method,
         )
 
         rows.append({
@@ -230,24 +279,94 @@ def run_h1_within_subject(slopes: pd.DataFrame) -> None:
     print(f"Cohen's dz: {dz:.4f}")
 
 
-def permutation_pvalue_day1(xT: np.ndarray, xP: np.ndarray, n_resamples: int = 10000, seed: int = 0) -> float:
-    xT = np.asarray(xT, float)
-    xP = np.asarray(xP, float)
+def run_between_groups_test(
+    slopes: pd.DataFrame,
+    day_index: int,
+    column: str,
+    label: str,
+    n_perm: int = 10000,
+    seed: int = 0,
+) -> None:
+    """
+    Generic between-groups comparison (T > P) for a given day and column.
 
-    def stat(a, b, axis):
-        # mean difference T - P
+    Parameters:
+        slopes: DataFrame with fitted slopes (must have day_index, cond, participant_id, and the column)
+        day_index: Which day to filter (1 or 2)
+        column: Which column to compare ("a" for intercept, "b" for slope)
+        label: Label for print output (e.g., "H2", "H3")
+        n_perm: Number of permutations for permutation test
+        seed: Random seed for permutation test
+    """
+    day_data = slopes[slopes["day_index"] == day_index].copy()
+
+    # Assert one row per participant on this day
+    counts = day_data.groupby("participant_id").size()
+    bad = counts[counts != 1]
+    assert bad.empty, (
+        f"Expected exactly 1 Day-{day_index} row per participant.\n"
+        f"These participants have !=1 Day-{day_index} rows:\n{bad}"
+    )
+
+    # Split groups by condition on this day
+    xT = day_data.loc[day_data["cond"] == "T", column].to_numpy(float)
+    xP = day_data.loc[day_data["cond"] == "P", column].to_numpy(float)
+
+    assert len(xT) > 0 and len(xP) > 0, f"Need both groups present. nT={len(xT)} nP={len(xP)}"
+    assert len(xT) >= 2 and len(xP) >= 2, f"Welch t-test is shaky with tiny groups. nT={len(xT)} nP={len(xP)}"
+
+    # Welch t-test (one-sided: T > P)
+    res = stats.ttest_ind(xT, xP, equal_var=False, alternative="greater")
+    t_stat = float(res.statistic)
+    p_one = float(res.pvalue)
+    df = float(res.df)
+
+    # 95% CI for mean difference (mean(xT) - mean(xP))
+    ci = res.confidence_interval(confidence_level=0.95)
+    ci_lo, ci_hi = float(ci.low), float(ci.high)
+
+    mT, mP = float(np.mean(xT)), float(np.mean(xP))
+    diff = mT - mP
+
+    g = pg.compute_effsize(xT, xP, eftype="hedges")
+
+    # Permutation test
+    def stat_fn(a, b, axis):
         return np.mean(a, axis=axis) - np.mean(b, axis=axis)
 
-    res = stats.permutation_test(
+    perm_res = stats.permutation_test(
         data=(xT, xP),
-        statistic=stat,
+        statistic=stat_fn,
         permutation_type="independent",
-        alternative="greater",     # T > P
-        n_resamples=n_resamples,
+        alternative="greater",
+        n_resamples=n_perm,
         random_state=seed,
     )
-    
-    return float(res.pvalue)
+    p_perm = float(perm_res.pvalue)
+
+    col_label = "intercept a" if column == "a" else "slope b"
+    print(f"\n=== {label}: Day-{day_index} between-groups on {col_label} (T > P) ===")
+    print(f"n_T = {len(xT)}, n_P = {len(xP)}")
+    print(f"mean({column})_T = {mT:.6f}, mean({column})_P = {mP:.6f}, diff(T-P) = {diff:.6f}")
+    print(f"Welch t({df:.2f}) = {t_stat:.4f}, one-sided p = {p_one:.6g}")
+    print(f"95% CI for diff(T-P): [{ci_lo:.6f}, {ci_hi:.6f}]")
+    print(f"Hedges' g: {g:.4f}")
+    print(f"Permutation p (one-sided, {n_perm} perms): {p_perm:.6g}")
+
+
+def run_h2_between_groups_day1(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0) -> None:
+    """H2 (exploratory): Day-1 between-groups comparison on slope b (T > P)."""
+    run_between_groups_test(slopes, day_index=1, column="b", label="H2 (exploratory)", n_perm=n_perm, seed=seed)
+
+
+def run_h3_between_groups_day1_intercept(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0) -> None:
+    """H3 (exploratory): Day-1 between-groups comparison on intercept a (T > P)."""
+    run_between_groups_test(slopes, day_index=1, column="a", label="H3 (exploratory)", n_perm=n_perm, seed=seed)
+
+
+def run_h3_between_groups_day2_intercept(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0) -> None:
+    """H3 (exploratory): Day-2 between-groups comparison on intercept a (T > P)."""
+    run_between_groups_test(slopes, day_index=2, column="a", label="H3 (exploratory)", n_perm=n_perm, seed=seed)
 
 
 def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> plt.Figure:
@@ -284,7 +403,7 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
     y_max += y_padding
 
     # Muted colors
-    data_color = "#333333"
+    data_color = "#000000"
     fit_color = "#888888"
 
     def plot_participant(ax, pid, day_idx, is_last_row):
@@ -304,10 +423,9 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
 
         blocks = day_data["block"].values
         acc = day_data["accuracy"].values
-        cond = day_data["cond"].iloc[0]
 
         # Plot accuracy points - small, direct
-        ax.scatter(blocks, acc, s=8, color=data_color, zorder=3)
+        ax.scatter(blocks, acc, s=4, color=data_color, zorder=3)
 
         # Plot fitted curve if we have slope data
         fit_annotation = ""
@@ -318,8 +436,8 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
 
             x_fit = np.linspace(1, 8, 100)
             y_fit = log_linear(x_fit, a, b)
-            ax.plot(x_fit, y_fit, color=fit_color, linewidth=1.2, zorder=2)
-            fit_annotation = f"  b={b:.3f}, R²={r2:.2f}"
+            ax.plot(x_fit, y_fit, color=fit_color, linewidth=1, zorder=2)
+            fit_annotation = f"  LR={b:.2f}  off={a:.2f}  R²={r2:.2f}"
 
         # Tufte-style: remove spines, keep only left and bottom
         ax.spines["top"].set_visible(False)
@@ -330,19 +448,18 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
         ax.spines["bottom"].set_linewidth(0.5)
 
         # Minimal ticks
-        ax.tick_params(axis="both", which="both", length=3, width=0.5, colors="#666666")
+        ax.tick_params(axis="both", which="both", length=3, width=0.5, colors="#000000")
 
-        # Title with participant, day, condition and fit info
-        cond_label = "T-match" if cond == "T" else "P-match"
-        ax.set_title(f"{pid}, Day {day_idx} ({cond_label}){fit_annotation}",
-                     fontsize=9, loc="left", color="#333333")
+        # Title with participant and fit info (day/condition shown in column headers)
+        ax.set_title(f"{pid}{fit_annotation}",
+                     fontsize=9, loc="left", color="#000000")
 
         ax.set_xlim(0.5, 8.5)
         ax.set_ylim(y_min, y_max)
         ax.set_xticks(range(1, 9))
 
         if is_last_row:
-            ax.set_xlabel("Block", fontsize=8, color="#666666")
+            ax.set_xlabel("Block", fontsize=8, color="#000000")
         else:
             ax.set_xticklabels([])
 
@@ -366,16 +483,12 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
         for col_idx in range(4):
             ax = axes[row_idx, col_idx]
             if col_idx in (0, 2):
-                ax.set_ylabel("Accuracy", fontsize=8, color="#666666")
+                ax.set_ylabel("Accuracy", fontsize=8, color="#000000")
             else:
                 ax.set_yticklabels([])
 
-    # Add group headers at the top
-    fig.text(0.25, 0.99, "P-first", ha="center", va="top", fontsize=11, color="#333333")
-    fig.text(0.75, 0.99, "T-first", ha="center", va="top", fontsize=11, color="#333333")
-
     # Adjust layout with gap between the two groups
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
+    fig.tight_layout(rect=(0, 0, 0.98, 0.95))
     fig.subplots_adjust(wspace=0.15, hspace=0.4)
     # Add extra space between columns 1 and 2 (between P-first and T-first)
     for row_idx in range(n_rows):
@@ -384,52 +497,19 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
             pos = ax.get_position()
             ax.set_position([pos.x0 + 0.03, pos.y0, pos.width, pos.height])
 
+    # Add group headers at the top
+    fig.text(0.25, 0.99, "P-match first", ha="center", va="top", fontsize=13, color="#000000")
+    fig.text(0.75, 0.99, "T-match first", ha="center", va="top", fontsize=13, color="#000000")
+
+    # Add column headers (Day + condition) above each column
+    col_headers = ["Day 1, P-match", "Day 2, T-match", "Day 1, T-match", "Day 2, P-match"]
+    for col_idx, header in enumerate(col_headers):
+        ax = axes[0, col_idx]
+        pos = ax.get_position()
+        fig.text(pos.x0 + pos.width / 2, pos.y1 + 0.04, header,
+                 ha="center", va="bottom", fontsize=11, color="#000000")
+
     return fig
-
-
-def run_h2_between_groups_day1(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0) -> None:
-    day1 = slopes[slopes["day_index"] == 1].copy()
-
-    # Assert one slope per participant on Day 1
-    counts = day1.groupby("participant_id").size()
-    bad = counts[counts != 1]
-    assert bad.empty, (
-        "Expected exactly 1 Day-1 slope per participant.\n"
-        f"These participants have !=1 Day-1 rows:\n{bad}\n\n"
-        "If you have duplicates, you probably grouped wrong upstream."
-    )
-
-    # Split groups by Day-1 condition
-    xT = day1.loc[day1["cond"] == "T", "b"].to_numpy(float)
-    xP = day1.loc[day1["cond"] == "P", "b"].to_numpy(float)
-
-    assert len(xT) > 0 and len(xP) > 0, f"Need both groups present. nT={len(xT)} nP={len(xP)}"
-    assert len(xT) >= 2 and len(xP) >= 2, f"Welch t-test is shaky with tiny groups. nT={len(xT)} nP={len(xP)}"
-
-    # Welch t-test (one-sided: T > P)
-    res = stats.ttest_ind(xT, xP, equal_var=False, alternative="greater")
-
-    t_stat = float(res.statistic)
-    p_one  = float(res.pvalue)
-    df     = float(res.df)
-
-    # 95% CI for mean difference (mean(xT) - mean(xP))
-    ci = res.confidence_interval(confidence_level=0.95)
-    ci_lo, ci_hi = float(ci.low), float(ci.high)
-
-    mT, mP = float(np.mean(xT)), float(np.mean(xP))
-    diff = mT - mP
-
-    g = pg.compute_effsize(xT, xP, eftype="hedges")
-    p_perm = permutation_pvalue_day1(xT, xP, n_resamples=n_perm, seed=seed)
-
-    print("\n=== H2 (exploratory): Day-1 between-groups (T Day1 > P Day1) ===")
-    print(f"n_T = {len(xT)}, n_P = {len(xP)}")
-    print(f"mean(b)_T = {mT:.6f}, mean(b)_P = {mP:.6f}, diff(T-P) = {diff:.6f}")
-    print(f"Welch t({df:.2f}) = {t_stat:.4f}, one-sided p = {p_one:.6g}")
-    print(f"95% CI for diff(T-P) (SciPy): [{ci_lo:.6f}, {ci_hi:.6f}]")
-    print(f"Hedges' g: {g:.4f}")
-    print(f"Permutation p (one-sided, {n_perm} perms): {p_perm:.6g}")
 
 
 def parse_participant_list(value: str | None) -> list[str] | None:
@@ -473,6 +553,13 @@ def main():
         default=42,
         help="Random seed for permutation test (default: 42)"
     )
+    parser.add_argument(
+        "--fit-method",
+        type=str,
+        choices=["ols", "l1"],
+        default="ols",
+        help="Fitting method: 'ols' (L2 loss, default) or 'l1' (L1 loss / median regression)"
+    )
 
     args = parser.parse_args()
 
@@ -503,15 +590,17 @@ def main():
     # Add day index
     df = add_day_index(df)
 
-    # Compute block accuracies
+    # Compute block accuracies (scaled to 0-100%)
     block_acc = (
         df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
         .mean()
         .reset_index(name="accuracy")
     )
+    block_acc["accuracy"] = block_acc["accuracy"] * 100
 
     # Fit learning rates
-    slopes = fit_slopes_per_session(block_acc)
+    print(f"Fitting with method: {args.fit_method}")
+    slopes = fit_slopes_per_session(block_acc, method=args.fit_method)
 
     # Print fitted slopes
     print("\n=== Fitted slopes ===")
@@ -520,6 +609,8 @@ def main():
     # Run hypothesis tests
     run_h1_within_subject(slopes)
     run_h2_between_groups_day1(slopes, n_perm=args.n_permutations, seed=args.permutation_seed)
+    run_h3_between_groups_day1_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed)
+    run_h3_between_groups_day2_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed)
 
     # Visualize learning curves
     visualize_learning_curves(block_acc, slopes)
