@@ -270,13 +270,18 @@ def run_h1_within_subject(slopes: pd.DataFrame) -> None:
     ci_lo, ci_hi = float(ci.low), float(ci.high)
 
     m  = float(np.mean(diffs))     # mean difference
+    sd = float(np.std(diffs, ddof=1))  # sample SD
     dz = cohens_dz(diffs)          # effect size (SciPy doesn't provide this)
+
+    # # Also report individual condition means ± SD
+    # b_T = b_by["T"].to_numpy(float)
+    # b_P = b_by["P"].to_numpy(float)
 
     print("\n=== H1 (confirmatory): within-subject T > P on slope b ===")
     print(f"N completers: {n}")
-    print(f"mean(d=b_T-b_P) = {m:.6f}")
+    print(f"Difference (T-P): {m:.2f} ± {sd:.2f} (mean ± SD)")
     print(f"t({df:.0f}) = {t_stat:.4f}, one-sided p = {p_one:.6g}")
-    print(f"95% CI for mean(d): [{ci_lo:.6f}, {ci_hi:.6f}]")
+    print(f"95% CI for mean(d): [{ci_lo:.2f}, {ci_hi:.2f}]")
     print(f"Cohen's dz: {dz:.4f}")
 
 
@@ -329,7 +334,8 @@ def run_between_groups_test(
     ci = res.confidence_interval(confidence_level=0.95)
     ci_lo, ci_hi = float(ci.low), float(ci.high)
 
-    mT, mP = float(np.mean(xT)), float(np.mean(xP))
+    mT, sdT = float(np.mean(xT)), float(np.std(xT, ddof=1))
+    mP, sdP = float(np.mean(xP)), float(np.std(xP, ddof=1))
     diff = mT - mP
 
     g = pg.compute_effsize(xT, xP, eftype="hedges")
@@ -353,9 +359,11 @@ def run_between_groups_test(
     sided_label = "two-sided" if two_sided else "one-sided"
     print(f"\n=== {label}: Day-{day_index} between-groups on {col_label} ({test_type}) ===")
     print(f"n_T = {len(xT)}, n_P = {len(xP)}")
-    print(f"mean({column})_T = {mT:.6f}, mean({column})_P = {mP:.6f}, diff(T-P) = {diff:.6f}")
+    print(f"T-match: {mT:.2f} ± {sdT:.2f} (mean ± SD)")
+    print(f"P-match: {mP:.2f} ± {sdP:.2f} (mean ± SD)")
+    print(f"Difference (T-P): {diff:.2f}")
     print(f"Welch t({df:.2f}) = {t_stat:.4f}, {sided_label} p = {p_val:.6g}")
-    print(f"95% CI for diff(T-P): [{ci_lo:.6f}, {ci_hi:.6f}]")
+    print(f"95% CI for diff(T-P): [{ci_lo:.2f}, {ci_hi:.2f}]")
     print(f"Hedges' g: {g:.4f}")
     print(f"Permutation p ({sided_label}, {n_perm} perms): {p_perm:.6g}")
 
