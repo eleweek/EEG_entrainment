@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy import stats
 import statsmodels.api as sm
+import statsmodels.formula.api as smf
 from statsmodels.regression.quantile_regression import QuantReg
 
 
@@ -286,9 +287,10 @@ def run_between_groups_test(
     label: str,
     n_perm: int = 10000,
     seed: int = 0,
+    two_sided: bool = False,
 ) -> None:
     """
-    Generic between-groups comparison (T > P) for a given day and column.
+    Generic between-groups comparison for a given day and column.
 
     Parameters:
         slopes: DataFrame with fitted slopes (must have day_index, cond, participant_id, and the column)
@@ -297,6 +299,7 @@ def run_between_groups_test(
         label: Label for print output (e.g., "H2", "H3")
         n_perm: Number of permutations for permutation test
         seed: Random seed for permutation test
+        two_sided: If True, use two-sided test; if False, use one-sided (T > P)
     """
     day_data = slopes[slopes["day_index"] == day_index].copy()
 
@@ -315,10 +318,11 @@ def run_between_groups_test(
     assert len(xT) > 0 and len(xP) > 0, f"Need both groups present. nT={len(xT)} nP={len(xP)}"
     assert len(xT) >= 2 and len(xP) >= 2, f"Welch t-test is shaky with tiny groups. nT={len(xT)} nP={len(xP)}"
 
-    # Welch t-test (one-sided: T > P)
-    res = stats.ttest_ind(xT, xP, equal_var=False, alternative="greater")
+    # Welch t-test
+    alternative = "two-sided" if two_sided else "greater"
+    res = stats.ttest_ind(xT, xP, equal_var=False, alternative=alternative)
     t_stat = float(res.statistic)
-    p_one = float(res.pvalue)
+    p_val = float(res.pvalue)
     df = float(res.df)
 
     # 95% CI for mean difference (mean(xT) - mean(xP))
@@ -338,35 +342,89 @@ def run_between_groups_test(
         data=(xT, xP),
         statistic=stat_fn,
         permutation_type="independent",
-        alternative="greater",
+        alternative=alternative,
         n_resamples=n_perm,
         random_state=seed,
     )
     p_perm = float(perm_res.pvalue)
 
     col_label = "intercept a" if column == "a" else "slope b"
-    print(f"\n=== {label}: Day-{day_index} between-groups on {col_label} (T > P) ===")
+    test_type = "T ≠ P" if two_sided else "T > P"
+    sided_label = "two-sided" if two_sided else "one-sided"
+    print(f"\n=== {label}: Day-{day_index} between-groups on {col_label} ({test_type}) ===")
     print(f"n_T = {len(xT)}, n_P = {len(xP)}")
     print(f"mean({column})_T = {mT:.6f}, mean({column})_P = {mP:.6f}, diff(T-P) = {diff:.6f}")
-    print(f"Welch t({df:.2f}) = {t_stat:.4f}, one-sided p = {p_one:.6g}")
+    print(f"Welch t({df:.2f}) = {t_stat:.4f}, {sided_label} p = {p_val:.6g}")
     print(f"95% CI for diff(T-P): [{ci_lo:.6f}, {ci_hi:.6f}]")
     print(f"Hedges' g: {g:.4f}")
-    print(f"Permutation p (one-sided, {n_perm} perms): {p_perm:.6g}")
+    print(f"Permutation p ({sided_label}, {n_perm} perms): {p_perm:.6g}")
 
 
-def run_h2_between_groups_day1(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0) -> None:
-    """H2 (exploratory): Day-1 between-groups comparison on slope b (T > P)."""
-    run_between_groups_test(slopes, day_index=1, column="b", label="H2 (exploratory)", n_perm=n_perm, seed=seed)
+def run_h2_between_groups_day1(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0, two_sided: bool = False) -> None:
+    """H2 (exploratory): Day-1 between-groups comparison on slope b."""
+    run_between_groups_test(slopes, day_index=1, column="b", label="H2 (exploratory)", n_perm=n_perm, seed=seed, two_sided=two_sided)
 
 
-def run_h3_between_groups_day1_intercept(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0) -> None:
-    """H3 (exploratory): Day-1 between-groups comparison on intercept a (T > P)."""
-    run_between_groups_test(slopes, day_index=1, column="a", label="H3 (exploratory)", n_perm=n_perm, seed=seed)
+def run_h3_between_groups_day1_intercept(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0, two_sided: bool = False) -> None:
+    """H3 (exploratory): Day-1 between-groups comparison on intercept a."""
+    run_between_groups_test(slopes, day_index=1, column="a", label="H3 (exploratory)", n_perm=n_perm, seed=seed, two_sided=two_sided)
 
 
-def run_h3_between_groups_day2_intercept(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0) -> None:
-    """H3 (exploratory): Day-2 between-groups comparison on intercept a (T > P)."""
-    run_between_groups_test(slopes, day_index=2, column="a", label="H3 (exploratory)", n_perm=n_perm, seed=seed)
+def run_h3_between_groups_day2_intercept(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0, two_sided: bool = False) -> None:
+    """H3 (exploratory): Day-2 between-groups comparison on intercept a."""
+    run_between_groups_test(slopes, day_index=2, column="a", label="H3 (exploratory)", n_perm=n_perm, seed=seed, two_sided=two_sided)
+
+
+def run_ancova_lr_controlling_offset(slopes: pd.DataFrame) -> None:
+    """
+    Mixed-effects ANCOVA: Does condition affect LR after controlling for offset and day?
+
+    Model: b ~ cond + a + day + (1|participant_id)
+
+    This answers: "If both conditions started at the same offset and day,
+    which learning rate would be higher?"
+    """
+    print("\n=== Mixed-effects ANCOVA: LR ~ condition + offset + day + (1|participant) ===")
+
+    # Prepare data - need numeric coding for condition
+    data = slopes.copy()
+    data["cond_T"] = (data["cond"] == "T").astype(int)  # T=1, P=0
+    data["day2"] = (data["day_index"] == 2).astype(int)  # Day2=1, Day1=0
+
+    # Center offset for easier interpretation
+    data["a_centered"] = data["a"] - data["a"].mean()
+
+    # Fit mixed-effects model: b ~ cond + a_centered + day + (1|participant_id)
+    model = smf.mixedlm(
+        "b ~ cond_T + a_centered + day2",
+        data=data,
+        groups=data["participant_id"]
+    )
+    result = model.fit()
+
+    print(result.summary())
+
+    # Extract key results for interpretation
+    print("\n--- Interpretation ---")
+    coef_cond = result.fe_params["cond_T"]
+    pval_cond = result.pvalues["cond_T"]
+    coef_offset = result.fe_params["a_centered"]
+    pval_offset = result.pvalues["a_centered"]
+    coef_day = result.fe_params["day2"]
+    pval_day = result.pvalues["day2"]
+
+    print(f"Condition effect (T vs P): {coef_cond:.4f} (p = {pval_cond:.4g})")
+    print(f"  -> At the same offset/day, T-match LR is {coef_cond:.4f} {'higher' if coef_cond > 0 else 'lower'} than P-match")
+    print(f"Offset effect: {coef_offset:.4f} (p = {pval_offset:.4g})")
+    print(f"  -> For each 1% increase in offset, LR changes by {coef_offset:.4f}")
+    print(f"Day effect (Day 2 vs Day 1): {coef_day:.4f} (p = {pval_day:.4g})")
+    print(f"  -> Day 2 LR is {coef_day:.4f} {'higher' if coef_day > 0 else 'lower'} than Day 1")
+
+    if pval_cond < 0.05:
+        print("\nConclusion: Condition effect on LR is significant even after controlling for offset and day.")
+    else:
+        print("\nConclusion: Condition effect on LR is NOT significant after controlling for offset and day.")
+        print("  -> The apparent LR difference may be driven by offset/day differences.")
 
 
 def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> plt.Figure:
@@ -608,9 +666,10 @@ def main():
 
     # Run hypothesis tests
     run_h1_within_subject(slopes)
-    run_h2_between_groups_day1(slopes, n_perm=args.n_permutations, seed=args.permutation_seed)
-    run_h3_between_groups_day1_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed)
-    run_h3_between_groups_day2_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed)
+    run_h2_between_groups_day1(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=False)
+    run_h3_between_groups_day1_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
+    run_h3_between_groups_day2_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
+    run_ancova_lr_controlling_offset(slopes)
 
     # Visualize learning curves
     visualize_learning_curves(block_acc, slopes)
