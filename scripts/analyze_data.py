@@ -42,10 +42,10 @@ def fit_learning_rate_ols(blocks: np.ndarray, acc: np.ndarray) -> FitResult:
     blocks = np.asarray(blocks, dtype=float)
     acc = np.asarray(acc, dtype=float)
 
-    if len(blocks) != 8:
-        raise ValueError(f"Unexpected number of blocks {blocks}. Expected: 8")
+    if not (3 <= len(blocks) <= 8):
+        raise ValueError(f"Unexpected number of blocks {len(blocks)}. Expected: 3-8")
 
-    # Initial guess: a ~= acc at block 1, b small
+    # Initial guess: a ~= acc at first block, b small
     p0 = (float(acc[0]), 0.01)
 
     popt, pcov = curve_fit(log_linear, blocks, acc, p0=p0)
@@ -74,8 +74,8 @@ def fit_learning_rate_l1(blocks: np.ndarray, acc: np.ndarray) -> FitResult:
     blocks = np.asarray(blocks, dtype=float)
     acc = np.asarray(acc, dtype=float)
 
-    if len(blocks) != 8:
-        raise ValueError(f"Unexpected number of blocks {blocks}. Expected: 8")
+    if not (3 <= len(blocks) <= 8):
+        raise ValueError(f"Unexpected number of blocks {len(blocks)}. Expected: 3-8")
 
     # Design matrix: [1, log(block)]
     X = sm.add_constant(np.log(blocks))
@@ -171,6 +171,23 @@ def load_trials(
     return df
 
 
+def drop_first_n_trials(df: pd.DataFrame, n: int) -> pd.DataFrame:
+    """
+    Drop the first N trials from each session.
+
+    This simulates a practice block - the original study had 50 practice trials
+    before the main task began.
+    """
+    if n <= 0:
+        return df
+
+    def drop_first_n(session_df: pd.DataFrame) -> pd.DataFrame:
+        # Sort by trial_index to ensure we drop the first N
+        session_df = session_df.sort_values("trial_index")
+        return session_df.iloc[n:]
+
+    return df.groupby(["participant_id", "session_id"], group_keys=False).apply(drop_first_n)
+
 
 def add_day_index(df_trials: pd.DataFrame) -> pd.DataFrame:
     """
@@ -190,11 +207,17 @@ def add_day_index(df_trials: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def fit_slopes_per_session(block_acc: pd.DataFrame, method: str = "ols") -> pd.DataFrame:
+def fit_slopes_per_session(block_acc: pd.DataFrame, method: str = "ols", drop_first_n_blocks: int = 0) -> pd.DataFrame:
     rows = []
 
     for (pid, sid, day), sub in block_acc.groupby(["participant_id", "session_id", "day_index"], sort=True):
         sub = sub.sort_values("block")
+
+        # Drop first N blocks if requested (to exclude warm-up effects)
+        if drop_first_n_blocks > 0:
+            sub = sub[sub["block"] > drop_first_n_blocks].copy()
+            # Renumber blocks so first remaining block is 1
+            sub["block"] = sub["block"] - drop_first_n_blocks
 
         # condition is constant within the session/day
         cond = sub["cond"].iloc[0]
@@ -525,7 +548,7 @@ def visualize_offset_vs_lr(slopes: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> plt.Figure:
+def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFrame, drop_first_n_blocks: int = 0) -> plt.Figure:
     """
     Plot average block accuracies for T-first and P-first groups on both days.
 
@@ -535,6 +558,10 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
     - Fit log-linear curves separately for each day
     - Tufte-style: minimal, direct labeling
     """
+    # Drop first N blocks if requested and renumber
+    if drop_first_n_blocks > 0:
+        block_acc = block_acc[block_acc["block"] > drop_first_n_blocks].copy()
+        block_acc["block"] = block_acc["block"] - drop_first_n_blocks
     # Determine each participant's first-day condition (group)
     day1_cond = (
         slopes[slopes["day_index"] == 1][["participant_id", "cond"]]
@@ -577,9 +604,11 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
             # Plot dots - small, unobtrusive
             ax.scatter(blocks_plot, acc, c=color, s=20, zorder=3)
 
-            # Fit log-linear curve (using original block numbers 1-8)
+            # Fit log-linear curve
+            min_block = blocks_original.min()
+            max_block = blocks_original.max()
             fit = fit_learning_rate(blocks_original, acc, method="ols")
-            x_fit_original = np.linspace(1, 8, 100)
+            x_fit_original = np.linspace(min_block, max_block, 100)
             x_fit_plot = x_fit_original + (8 if day == 2 else 0)
             y_fit = log_linear(x_fit_original, fit.a, fit.b)
             ax.plot(x_fit_plot, y_fit, color=color, linewidth=1.2, zorder=2)
@@ -603,8 +632,9 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
         ax.text(x - 3.5, y + y_offset, f"{label_names[(group, day)]}  LR={lr:.1f}",
                 color=color, fontsize=8, va=va, ha="center")
 
-    # Minimal day separator
-    ax.axvline(x=8.5, color="#dddddd", linewidth=0.5, zorder=0)
+    # Minimal day separator (at boundary between Day 1 and Day 2)
+    n_blocks = 8 - drop_first_n_blocks
+    ax.axvline(x=n_blocks + 0.5, color="#dddddd", linewidth=0.5, zorder=0)
 
     # Tufte-style axis
     ax.spines["top"].set_visible(False)
@@ -614,9 +644,13 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
     ax.spines["left"].set_color("black")
     ax.spines["bottom"].set_color("black")
 
-    ax.set_xlim(0.5, 18.5)
-    ax.set_xticks(list(range(1, 9)) + list(range(9, 17)))
-    ax.set_xticklabels(list(range(1, 9)) + list(range(1, 9)), fontsize=8, color="black")
+    # After renumbering, blocks are 1 to (8 - drop_first_n_blocks)
+    n_blocks = 8 - drop_first_n_blocks
+    day1_ticks = list(range(1, n_blocks + 1))
+    day2_ticks = list(range(n_blocks + 1, 2 * n_blocks + 1))
+    ax.set_xlim(0.5, 2 * n_blocks + 0.5)
+    ax.set_xticks(day1_ticks + day2_ticks)
+    ax.set_xticklabels(day1_ticks + day1_ticks, fontsize=8, color="black")
     ax.tick_params(axis="x", length=3, width=0.5)
     ax.set_xlabel("Block", fontsize=9, color="black")
 
@@ -627,7 +661,7 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
     return fig
 
 
-def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> plt.Figure:
+def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame, drop_first_n_blocks: int = 0) -> plt.Figure:
     """
     Create visualization of accuracy and learning rate fits for all participants.
 
@@ -636,6 +670,11 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
       - Columns 2-3: T-first participant (Day 1, Day 2)
     Two participants per row (one from each group).
     """
+    # Drop first N blocks if requested and renumber
+    if drop_first_n_blocks > 0:
+        block_acc = block_acc[block_acc["block"] > drop_first_n_blocks].copy()
+        block_acc["block"] = block_acc["block"] - drop_first_n_blocks
+
     # Determine each participant's first-day condition
     day1_cond = (
         slopes[slopes["day_index"] == 1][["participant_id", "cond"]]
@@ -692,7 +731,9 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
             b = day_slope["b"].iloc[0]
             r2 = day_slope["r2"].iloc[0]
 
-            x_fit = np.linspace(1, 8, 100)
+            # Blocks are renumbered to 1..n_blocks
+            n_blocks = 8 - drop_first_n_blocks
+            x_fit = np.linspace(1, n_blocks, 100)
             y_fit = log_linear(x_fit, a, b)
             ax.plot(x_fit, y_fit, color=fit_color, linewidth=1, zorder=2)
             fit_annotation = f"  LR={b:.2f}  off={a:.2f}  R²={r2:.2f}"
@@ -712,9 +753,10 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> 
         ax.set_title(f"{pid}{fit_annotation}",
                      fontsize=9, loc="left", color="#000000")
 
-        ax.set_xlim(0.5, 8.5)
+        n_blocks = 8 - drop_first_n_blocks
+        ax.set_xlim(0.5, n_blocks + 0.5)
         ax.set_ylim(y_min, y_max)
-        ax.set_xticks(range(1, 9))
+        ax.set_xticks(range(1, n_blocks + 1))
 
         if is_last_row:
             ax.set_xlabel("Block", fontsize=8, color="#000000")
@@ -818,6 +860,18 @@ def main():
         default="ols",
         help="Fitting method: 'ols' (L2 loss, default) or 'l1' (L1 loss / median regression)"
     )
+    parser.add_argument(
+        "--drop-first-n-blocks",
+        type=int,
+        default=0,
+        help="Drop the first N blocks from each session before fitting (to exclude warm-up effects)"
+    )
+    parser.add_argument(
+        "--drop-first-n-trials",
+        type=int,
+        default=0,
+        help="Drop the first N trials from each session (to simulate practice trials, e.g., 50)"
+    )
 
     args = parser.parse_args()
 
@@ -845,6 +899,12 @@ def main():
         print("No data loaded. Exiting.")
         return
 
+    # Drop first N trials if requested (simulates practice block)
+    if args.drop_first_n_trials > 0:
+        print(f"  Dropping first {args.drop_first_n_trials} trials from each session")
+        df = drop_first_n_trials(df, args.drop_first_n_trials)
+        print(f"  {df.shape[0]} trials remaining")
+
     # Add day index
     df = add_day_index(df)
 
@@ -858,7 +918,9 @@ def main():
 
     # Fit learning rates
     print(f"Fitting with method: {args.fit_method}")
-    slopes = fit_slopes_per_session(block_acc, method=args.fit_method)
+    if args.drop_first_n_blocks > 0:
+        print(f"  Dropping first {args.drop_first_n_blocks} block(s) from each session")
+    slopes = fit_slopes_per_session(block_acc, method=args.fit_method, drop_first_n_blocks=args.drop_first_n_blocks)
 
     # Print fitted slopes
     print("\n=== Fitted slopes ===")
@@ -872,9 +934,9 @@ def main():
     run_ancova_lr_controlling_offset(slopes)
 
     # Visualize
-    visualize_learning_curves(block_acc, slopes)
+    visualize_learning_curves(block_acc, slopes, drop_first_n_blocks=args.drop_first_n_blocks)
     visualize_offset_vs_lr(slopes)
-    visualize_group_average_both_days(block_acc, slopes)
+    visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=args.drop_first_n_blocks)
     plt.show()
 
 
