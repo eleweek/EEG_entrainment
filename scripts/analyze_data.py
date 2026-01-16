@@ -747,13 +747,19 @@ def visualize_group_average_both_days(
     return fig
 
 
-def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame, drop_first_n_blocks: int = 0, use_sliding: bool = False) -> plt.Figure:
+def visualize_learning_curves(
+    block_acc: pd.DataFrame,
+    slopes: pd.DataFrame,
+    drop_first_n_blocks: int = 0,
+    use_sliding: bool = False,
+    day1_only: bool = False,
+) -> plt.Figure:
     """
     Create visualization of accuracy and learning rate fits for all participants.
 
-    Layout: 4 columns per row
-      - Columns 0-1: P-first participant (Day 1, Day 2)
-      - Columns 2-3: T-first participant (Day 1, Day 2)
+    Layout: 4 columns per row (default) or 2 columns per row (day1_only=True)
+      - Default: Columns 0-1: P-first (Day 1, Day 2), Columns 2-3: T-first (Day 1, Day 2)
+      - day1_only: Column 0: P-first (Day 1), Column 1: T-first (Day 1)
     Two participants per row (one from each group).
     """
     # Drop first N blocks if requested and renumber (only for discrete blocks)
@@ -776,8 +782,13 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame, dro
 
     n_rows = max(len(p_first), len(t_first))
 
-    # 4 columns: P-first Day1, P-first Day2, T-first Day1, T-first Day2
-    fig, axes = plt.subplots(n_rows, 4, figsize=(14, 1.25 * n_rows), squeeze=False)
+    # Layout: 2 columns (day1_only) or 4 columns (default)
+    if day1_only:
+        n_cols = 2
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(7, 1.25 * n_rows), squeeze=False)
+    else:
+        n_cols = 4
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(14, 1.25 * n_rows), squeeze=False)
 
     # Compute global y-axis range from data with small padding
     all_acc = block_acc["accuracy"].values
@@ -849,51 +860,76 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame, dro
         else:
             ax.set_xticklabels([])
 
-    for row_idx in range(n_rows):
-        # P-first participant (columns 0, 1)
-        pid_p = p_first[row_idx] if row_idx < len(p_first) else None
-        # T-first participant (columns 2, 3)
-        pid_t = t_first[row_idx] if row_idx < len(t_first) else None
+    if day1_only:
+        # Day 1 only: 2 columns (P-first, T-first)
+        for row_idx in range(n_rows):
+            pid_p = p_first[row_idx] if row_idx < len(p_first) else None
+            pid_t = t_first[row_idx] if row_idx < len(t_first) else None
+            is_last_row = row_idx == n_rows - 1
 
-        is_last_row = row_idx == n_rows - 1
+            # Column 0: P-first Day 1
+            plot_participant(axes[row_idx, 0], pid_p, 1, is_last_row)
+            # Column 1: T-first Day 1
+            plot_participant(axes[row_idx, 1], pid_t, 1, is_last_row)
 
-        # P-first: Day 1 (col 0), Day 2 (col 1)
-        plot_participant(axes[row_idx, 0], pid_p, 1, is_last_row)
-        plot_participant(axes[row_idx, 1], pid_p, 2, is_last_row)
+            # Y-axis labels only on leftmost column
+            axes[row_idx, 0].set_ylabel("Accuracy", fontsize=8, color="#000000")
+            axes[row_idx, 1].set_yticklabels([])
 
-        # T-first: Day 1 (col 2), Day 2 (col 3)
-        plot_participant(axes[row_idx, 2], pid_t, 1, is_last_row)
-        plot_participant(axes[row_idx, 3], pid_t, 2, is_last_row)
+        fig.tight_layout(rect=(0, 0, 1, 0.95))
+        fig.subplots_adjust(wspace=0.15, hspace=0.4)
 
-        # Y-axis labels only on leftmost of each group
-        for col_idx in range(4):
-            ax = axes[row_idx, col_idx]
-            if col_idx in (0, 2):
-                ax.set_ylabel("Accuracy", fontsize=8, color="#000000")
-            else:
-                ax.set_yticklabels([])
+        # Add group headers at the top
+        fig.text(0.25, 0.98, "P-match (Day 1)", ha="center", va="top", fontsize=12, color="#000000")
+        fig.text(0.75, 0.98, "T-match (Day 1)", ha="center", va="top", fontsize=12, color="#000000")
 
-    # Adjust layout with gap between the two groups
-    fig.tight_layout(rect=(0, 0, 0.98, 0.95))
-    fig.subplots_adjust(wspace=0.15, hspace=0.4)
-    # Add extra space between columns 1 and 2 (between P-first and T-first)
-    for row_idx in range(n_rows):
-        for col_idx in [2, 3]:
-            ax = axes[row_idx, col_idx]
+    else:
+        # Default: 4 columns (Day 1 + Day 2 for both groups)
+        for row_idx in range(n_rows):
+            # P-first participant (columns 0, 1)
+            pid_p = p_first[row_idx] if row_idx < len(p_first) else None
+            # T-first participant (columns 2, 3)
+            pid_t = t_first[row_idx] if row_idx < len(t_first) else None
+
+            is_last_row = row_idx == n_rows - 1
+
+            # P-first: Day 1 (col 0), Day 2 (col 1)
+            plot_participant(axes[row_idx, 0], pid_p, 1, is_last_row)
+            plot_participant(axes[row_idx, 1], pid_p, 2, is_last_row)
+
+            # T-first: Day 1 (col 2), Day 2 (col 3)
+            plot_participant(axes[row_idx, 2], pid_t, 1, is_last_row)
+            plot_participant(axes[row_idx, 3], pid_t, 2, is_last_row)
+
+            # Y-axis labels only on leftmost of each group
+            for col_idx in range(4):
+                ax = axes[row_idx, col_idx]
+                if col_idx in (0, 2):
+                    ax.set_ylabel("Accuracy", fontsize=8, color="#000000")
+                else:
+                    ax.set_yticklabels([])
+
+        # Adjust layout with gap between the two groups
+        fig.tight_layout(rect=(0, 0, 0.98, 0.95))
+        fig.subplots_adjust(wspace=0.15, hspace=0.4)
+        # Add extra space between columns 1 and 2 (between P-first and T-first)
+        for row_idx in range(n_rows):
+            for col_idx in [2, 3]:
+                ax = axes[row_idx, col_idx]
+                pos = ax.get_position()
+                ax.set_position([pos.x0 + 0.03, pos.y0, pos.width, pos.height])
+
+        # Add group headers at the top
+        fig.text(0.25, 0.99, "P-match first", ha="center", va="top", fontsize=13, color="#000000")
+        fig.text(0.75, 0.99, "T-match first", ha="center", va="top", fontsize=13, color="#000000")
+
+        # Add column headers (Day + condition) above each column
+        col_headers = ["Day 1, P-match", "Day 2, T-match", "Day 1, T-match", "Day 2, P-match"]
+        for col_idx, header in enumerate(col_headers):
+            ax = axes[0, col_idx]
             pos = ax.get_position()
-            ax.set_position([pos.x0 + 0.03, pos.y0, pos.width, pos.height])
-
-    # Add group headers at the top
-    fig.text(0.25, 0.99, "P-match first", ha="center", va="top", fontsize=13, color="#000000")
-    fig.text(0.75, 0.99, "T-match first", ha="center", va="top", fontsize=13, color="#000000")
-
-    # Add column headers (Day + condition) above each column
-    col_headers = ["Day 1, P-match", "Day 2, T-match", "Day 1, T-match", "Day 2, P-match"]
-    for col_idx, header in enumerate(col_headers):
-        ax = axes[0, col_idx]
-        pos = ax.get_position()
-        fig.text(pos.x0 + pos.width / 2, pos.y1 + 0.04, header,
-                 ha="center", va="bottom", fontsize=11, color="#000000")
+            fig.text(pos.x0 + pos.width / 2, pos.y1 + 0.04, header,
+                     ha="center", va="bottom", fontsize=11, color="#000000")
 
     return fig
 
@@ -1052,7 +1088,7 @@ def visualize_original_individual_curves(
         blocks = p_data["block"].values
         acc = p_data["accuracy"].values
 
-        ax.scatter(blocks, acc, s=12, color=data_color, zorder=3)
+        ax.scatter(blocks, acc, s=4, color=data_color, zorder=3)
 
         fit_annotation = ""
         if not p_slope.empty:
@@ -1160,11 +1196,17 @@ def visualize_original_aggregate(
 
             endpoints[cond] = (x_fit[-1], y_fit[-1], fit.b)
 
-        # Direct labeling
+        # Direct labeling: T-match on top, P-match on bottom
         for cond, (x, y, lr) in endpoints.items():
             color = colors[cond]
-            y_offset = 1.5 if cond == "T" else -1.5
-            va = "bottom" if cond == "T" else "top"
+            if cond == "T":
+                # T-match: position above the curve
+                y_offset = 2.0
+                va = "bottom"
+            else:  # P-match
+                # P-match: position below the curve
+                y_offset = -2.0
+                va = "top"
             ax.text(x + 0.2, y + y_offset, f"{labels[cond]}  LR={lr:.1f}",
                     color=color, fontsize=9, va=va, ha="left")
 
@@ -1375,6 +1417,7 @@ def main():
     # Visualize
     drop_n = 0 if use_sliding else args.drop_first_n_blocks
     visualize_learning_curves(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding)
+    visualize_learning_curves(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding, day1_only=True)  # Day 1 only comparison
     visualize_offset_vs_lr(slopes)
     visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding)
     visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding, min_lr_1st_day=-1)  # Exclude negative day 1 LRs
