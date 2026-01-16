@@ -1162,6 +1162,7 @@ def visualize_original_aggregate(
     slopes: pd.DataFrame,
     min_lr_1st_day: float | None = None,
     show_side_by_side: bool = True,
+    replication_data: tuple[pd.DataFrame, pd.DataFrame] | None = None,
 ) -> plt.Figure:
     """
     Visualize aggregate learning curves for P-match vs T-match from original paper data.
@@ -1171,6 +1172,7 @@ def visualize_original_aggregate(
     Args:
         min_lr_1st_day: If set, exclude participants with LR below this threshold (e.g., 0 to exclude negative LRs)
         show_side_by_side: If True, show both unfiltered and filtered data side-by-side
+        replication_data: Optional tuple of (block_acc, slopes) from replication study (day 1 only)
     """
     colors = {
         "P": "#2d8a2d",  # Green for P-match
@@ -1242,27 +1244,54 @@ def visualize_original_aggregate(
 
     # Show side-by-side comparison if requested
     if show_side_by_side and min_lr_1st_day is not None:
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+        # Determine number of subplots
+        n_plots = 3 if replication_data is not None else 2
+        fig, axes = plt.subplots(1, n_plots, figsize=(7 * n_plots, 5))
+        if n_plots == 2:
+            ax1, ax2 = axes
+        else:
+            ax1, ax2, ax3 = axes
 
-        # Compute shared y-axis range from all data (unfiltered)
+        # Compute shared y-axis range from all data (original + replication if provided)
         all_means = block_acc.groupby(["cond", "block"])["accuracy"].mean()
         y_min = all_means.min()
         y_max = all_means.max()
+
+        if replication_data is not None:
+            rep_block_acc, rep_slopes = replication_data
+            # Filter to day 1 only
+            rep_day1 = rep_block_acc[rep_block_acc["day_index"] == 1]
+            rep_means = rep_day1.groupby(["cond", "block"])["accuracy"].mean()
+            y_min = min(y_min, rep_means.min())
+            y_max = max(y_max, rep_means.max())
+
         y_padding = (y_max - y_min) * 0.1
         y_lim = (y_min - y_padding, y_max + y_padding)
 
-        # Left: All data
-        plot_aggregate(ax1, block_acc, slopes, "All participants", y_lim=y_lim)
+        # Left: All data from original paper
+        plot_aggregate(ax1, block_acc, slopes, "Original: All participants", y_lim=y_lim)
 
-        # Right: Filtered data
+        # Middle: Filtered data from original paper
         valid_pids = slopes[slopes["b"] >= min_lr_1st_day]["participant_id"].unique()
         block_acc_filtered = block_acc[block_acc["participant_id"].isin(valid_pids)]
         slopes_filtered = slopes[slopes["participant_id"].isin(valid_pids)]
         n_excluded = len(slopes["participant_id"].unique()) - len(valid_pids)
         plot_aggregate(ax2, block_acc_filtered, slopes_filtered,
-                      f"Filtered (LR ≥ {min_lr_1st_day}, excluded {n_excluded})", y_lim=y_lim)
+                      f"Original: Filtered (LR ≥ {min_lr_1st_day}, n={n_excluded} excluded)", y_lim=y_lim)
 
-        fig.suptitle("Original Paper Data: P-match vs T-match", fontsize=13, y=0.98)
+        # Right: Replication day 1 (if provided)
+        if replication_data is not None:
+            rep_block_acc, rep_slopes = replication_data
+            # Filter to day 1 only
+            rep_day1_acc = rep_block_acc[rep_block_acc["day_index"] == 1].copy()
+            rep_day1_slopes = rep_slopes[rep_slopes["day_index"] == 1].copy()
+            plot_aggregate(ax3, rep_day1_acc, rep_day1_slopes, "Replication: Day 1", y_lim=y_lim)
+
+            # Add extra spacing before replication column
+            pos = ax3.get_position()
+            ax3.set_position([pos.x0 + 0.05, pos.y0, pos.width, pos.height])
+
+        fig.suptitle("Learning Rate Comparison: Original vs Replication", fontsize=14, y=0.98)
         fig.tight_layout(rect=(0, 0, 1, 0.96))
     else:
         # Original single-panel behavior
@@ -1361,22 +1390,6 @@ def main():
     if include_only is not None and exclude is not None:
         parser.error("Cannot use both --include-only-participants and --exclude-participants")
 
-    # Handle original paper data mode
-    if args.original_data_dir is not None:
-        print(f"Loading original paper data from {args.original_data_dir}...")
-        block_acc, slopes = load_original_paper_data(args.original_data_dir)
-        print(f"Loaded {len(slopes)} participants (P-match and T-match)")
-
-        # Print fitted slopes
-        print("\n=== Fitted slopes ===")
-        print(slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
-
-        # Visualize
-        visualize_original_individual_curves(block_acc, slopes, max_per_group=20, cols_per_group=3)
-        visualize_original_aggregate(block_acc, slopes, min_lr_1st_day=-1, show_side_by_side=True)
-        plt.show()
-        return
-
     # Load data
     print(f"Loading trials from {args.db}...")
     if include_only:
@@ -1422,6 +1435,24 @@ def main():
         print(f"  Dropping first {args.drop_first_n_blocks} block(s) from each session")
     slopes = fit_slopes_per_session(block_acc, method=args.fit_method, drop_first_n_blocks=0 if use_sliding else args.drop_first_n_blocks)
 
+    # Handle original paper data mode (after replication data loaded, so we can compare)
+    if args.original_data_dir is not None:
+        print(f"\nLoading original paper data from {args.original_data_dir}...")
+        orig_block_acc, orig_slopes = load_original_paper_data(args.original_data_dir)
+        print(f"Loaded {len(orig_slopes)} participants (P-match and T-match)")
+
+        # Print fitted slopes
+        print("\n=== Original Paper Fitted slopes ===")
+        print(orig_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
+
+        # Visualize
+        visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=18, cols_per_group=3)
+        # Show comparison with replication data (3 columns)
+        visualize_original_aggregate(orig_block_acc, orig_slopes, min_lr_1st_day=-1,
+                                     show_side_by_side=True, replication_data=(block_acc, slopes))
+        plt.show()
+        return
+
     # Print fitted slopes
     print("\n=== Fitted slopes ===")
     print(slopes.sort_values(["participant_id", "day_index", "cond"]).to_string(index=False))
@@ -1439,7 +1470,7 @@ def main():
     visualize_learning_curves(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding, day1_only=True)  # Day 1 only comparison
     visualize_offset_vs_lr(slopes)
     visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding)
-    visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding, min_lr_1st_day=-1)  # Exclude negative day 1 LRs
+    visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding, min_lr_1st_day=0)  # Exclude negative day 1 LRs
     plt.show()
 
 
