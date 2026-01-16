@@ -610,7 +610,13 @@ def visualize_offset_vs_lr(slopes: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFrame, drop_first_n_blocks: int = 0, use_sliding: bool = False) -> plt.Figure:
+def visualize_group_average_both_days(
+    block_acc: pd.DataFrame,
+    slopes: pd.DataFrame,
+    drop_first_n_blocks: int = 0,
+    use_sliding: bool = False,
+    min_lr_1st_day: float | None = None,
+) -> plt.Figure:
     """
     Plot average block accuracies for T-first and P-first groups on both days.
 
@@ -619,7 +625,22 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
     - Day 1 = dark, Day 2 = light
     - Fit log-linear curves separately for each day
     - Tufte-style: minimal, direct labeling
+
+    Args:
+        min_lr_1st_day: If set, exclude participants with day 1 LR below this threshold
     """
+    # Filter participants by minimum LR on day 1 if specified
+    title_suffix = ""
+    if min_lr_1st_day is not None:
+        # Exclude participants who have LR < min_lr_1st_day on day 1
+        day1_slopes = slopes[slopes["day_index"] == 1]
+        bad_pids = day1_slopes[day1_slopes["b"] < min_lr_1st_day]["participant_id"].unique()
+        n_excluded = len(bad_pids)
+        valid_pids = slopes[~slopes["participant_id"].isin(bad_pids)]["participant_id"].unique()
+        block_acc = block_acc[block_acc["participant_id"].isin(valid_pids)].copy()
+        slopes = slopes[slopes["participant_id"].isin(valid_pids)].copy()
+        title_suffix = f" (excluded {n_excluded} participants with day 1 LR < {min_lr_1st_day})"
+
     # Drop first N blocks if requested and renumber (only for discrete blocks)
     if drop_first_n_blocks > 0 and not use_sliding:
         block_acc = block_acc[block_acc["block"] > drop_first_n_blocks].copy()
@@ -718,6 +739,9 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
 
     ax.set_ylabel("Accuracy (%)", fontsize=9, color="black")
     ax.tick_params(axis="y", colors="black", length=3, width=0.5)
+
+    if title_suffix:
+        ax.set_title(f"Group Average{title_suffix}", fontsize=10)
 
     fig.tight_layout()
     return fig
@@ -1089,71 +1113,112 @@ def visualize_original_individual_curves(
     return fig
 
 
-def visualize_original_aggregate(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> plt.Figure:
+def visualize_original_aggregate(
+    block_acc: pd.DataFrame,
+    slopes: pd.DataFrame,
+    min_lr_1st_day: float | None = None,
+    show_side_by_side: bool = True,
+) -> plt.Figure:
     """
     Visualize aggregate learning curves for P-match vs T-match from original paper data.
 
     Single day, two conditions overlaid.
-    """
-    fig, ax = plt.subplots(figsize=(8, 5))
 
+    Args:
+        min_lr_1st_day: If set, exclude participants with LR below this threshold (e.g., 0 to exclude negative LRs)
+        show_side_by_side: If True, show both unfiltered and filtered data side-by-side
+    """
     colors = {
         "P": "#2d8a2d",  # Green for P-match
         "T": "#1f5f8a",  # Blue for T-match
     }
     labels = {
-        "P": "P-match (Peak)",
-        "T": "T-match (Trough)",
+        "P": "P-match",
+        "T": "T-match",
     }
 
-    endpoints = {}
+    def plot_aggregate(ax, block_acc_data, slopes_data, title):
+        """Helper to plot one aggregate view"""
+        endpoints = {}
 
-    for cond in ["P", "T"]:
-        cond_acc = block_acc[block_acc["cond"] == cond]
-        grp_means = cond_acc.groupby("block")["accuracy"].mean().reset_index()
-        blocks = grp_means["block"].values
-        acc = grp_means["accuracy"].values
+        for cond in ["P", "T"]:
+            cond_acc = block_acc_data[block_acc_data["cond"] == cond]
+            grp_means = cond_acc.groupby("block")["accuracy"].mean().reset_index()
+            blocks = grp_means["block"].values
+            acc = grp_means["accuracy"].values
 
-        color = colors[cond]
+            color = colors[cond]
 
-        # Plot dots
-        ax.scatter(blocks, acc, c=color, s=30, zorder=3)
+            # Plot dots
+            ax.scatter(blocks, acc, c=color, s=30, zorder=3)
 
-        # Fit and plot curve
-        fit = fit_learning_rate(blocks, acc, method="ols")
-        x_fit = np.linspace(1, 8, 100)
-        y_fit = log_linear(x_fit, fit.a, fit.b)
-        ax.plot(x_fit, y_fit, color=color, linewidth=1.5, zorder=2)
+            # Fit and plot curve
+            fit = fit_learning_rate(blocks, acc, method="ols")
+            x_fit = np.linspace(1, 8, 100)
+            y_fit = log_linear(x_fit, fit.a, fit.b)
+            ax.plot(x_fit, y_fit, color=color, linewidth=1.5, zorder=2)
 
-        endpoints[cond] = (x_fit[-1], y_fit[-1], fit.b)
+            endpoints[cond] = (x_fit[-1], y_fit[-1], fit.b)
 
-    # Direct labeling
-    for cond, (x, y, lr) in endpoints.items():
-        color = colors[cond]
-        y_offset = 1.5 if cond == "T" else -1.5
-        va = "bottom" if cond == "T" else "top"
-        ax.text(x + 0.2, y + y_offset, f"{labels[cond]}  LR={lr:.1f}",
-                color=color, fontsize=9, va=va, ha="left")
+        # Direct labeling
+        for cond, (x, y, lr) in endpoints.items():
+            color = colors[cond]
+            y_offset = 1.5 if cond == "T" else -1.5
+            va = "bottom" if cond == "T" else "top"
+            ax.text(x + 0.2, y + y_offset, f"{labels[cond]}  LR={lr:.1f}",
+                    color=color, fontsize=9, va=va, ha="left")
 
-    # Tufte-style axis
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.spines["left"].set_linewidth(0.5)
-    ax.spines["bottom"].set_linewidth(0.5)
-    ax.spines["left"].set_color("black")
-    ax.spines["bottom"].set_color("black")
+        # Tufte-style axis
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_linewidth(0.5)
+        ax.spines["bottom"].set_linewidth(0.5)
+        ax.spines["left"].set_color("black")
+        ax.spines["bottom"].set_color("black")
 
-    ax.set_xlim(0.5, 8.5)
-    ax.set_xticks(range(1, 9))
-    ax.tick_params(axis="x", length=3, width=0.5)
-    ax.set_xlabel("Block", fontsize=10, color="black")
+        ax.set_xlim(0.5, 8.5)
+        ax.set_xticks(range(1, 9))
+        ax.tick_params(axis="x", length=3, width=0.5)
+        ax.set_xlabel("Block", fontsize=10, color="black")
 
-    ax.set_ylabel("Accuracy (%)", fontsize=10, color="black")
-    ax.tick_params(axis="y", colors="black", length=3, width=0.5)
+        ax.set_ylabel("Accuracy (%)", fontsize=10, color="black")
+        ax.tick_params(axis="y", colors="black", length=3, width=0.5)
 
-    ax.set_title("Original Paper Data: P-match vs T-match (Michael et al., 2023)", fontsize=11)
+        ax.set_title(title, fontsize=11)
 
-    fig.tight_layout()
+    # Show side-by-side comparison if requested
+    if show_side_by_side and min_lr_1st_day is not None:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+        # Left: All data
+        plot_aggregate(ax1, block_acc, slopes, "All participants")
+
+        # Right: Filtered data
+        valid_pids = slopes[slopes["b"] >= min_lr_1st_day]["participant_id"].unique()
+        block_acc_filtered = block_acc[block_acc["participant_id"].isin(valid_pids)]
+        slopes_filtered = slopes[slopes["participant_id"].isin(valid_pids)]
+        n_excluded = len(slopes["participant_id"].unique()) - len(valid_pids)
+        plot_aggregate(ax2, block_acc_filtered, slopes_filtered,
+                      f"Filtered (LR ≥ {min_lr_1st_day}, excluded {n_excluded})")
+
+        fig.suptitle("Original Paper Data: P-match vs T-match", fontsize=13, y=0.98)
+        fig.tight_layout(rect=(0, 0, 1, 0.96))
+    else:
+        # Original single-panel behavior
+        fig, ax = plt.subplots(figsize=(8, 5))
+
+        # Filter participants by minimum LR if specified
+        if min_lr_1st_day is not None:
+            valid_pids = slopes[slopes["b"] >= min_lr_1st_day]["participant_id"].unique()
+            block_acc = block_acc[block_acc["participant_id"].isin(valid_pids)]
+            n_excluded = len(slopes) - len(valid_pids)
+            title_suffix = f" (excluded {n_excluded} with LR < {min_lr_1st_day})"
+        else:
+            title_suffix = ""
+
+        plot_aggregate(ax, block_acc, slopes, f"Original Paper Data: P-match vs T-match{title_suffix}")
+        fig.tight_layout()
+
     return fig
 
 
@@ -1246,8 +1311,8 @@ def main():
         print(slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
 
         # Visualize
-        visualize_original_individual_curves(block_acc, slopes, max_per_group=18, cols_per_group=3)
-        visualize_original_aggregate(block_acc, slopes)
+        visualize_original_individual_curves(block_acc, slopes, max_per_group=20, cols_per_group=3)
+        visualize_original_aggregate(block_acc, slopes, min_lr_1st_day=-1, show_side_by_side=True)
         plt.show()
         return
 
@@ -1312,6 +1377,7 @@ def main():
     visualize_learning_curves(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding)
     visualize_offset_vs_lr(slopes)
     visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding)
+    visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding, min_lr_1st_day=-1)  # Exclude negative day 1 LRs
     plt.show()
 
 
