@@ -1099,7 +1099,7 @@ def visualize_original_individual_curves(
             x_fit = np.linspace(1, 8, 100)
             y_fit = log_linear(x_fit, a, b)
             ax.plot(x_fit, y_fit, color=fit_color, linewidth=1, zorder=2)
-            fit_annotation = f"  LR={b:.2f}  R²={r2:.2f}"
+            fit_annotation = f"LR={b:.2f}  off={a:.2f}  R²={r2:.2f}"
 
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
@@ -1109,7 +1109,7 @@ def visualize_original_individual_curves(
         ax.spines["bottom"].set_linewidth(0.5)
 
         ax.tick_params(axis="both", which="both", length=3, width=0.5, colors="#000000")
-        ax.set_title(f"{pid}{fit_annotation}", fontsize=9, loc="left", color="#000000")
+        ax.set_title(fit_annotation, fontsize=9, loc="left", color="#000000")
 
         ax.set_xlim(0.5, 8.5)
         ax.set_ylim(y_min, y_max)
@@ -1141,6 +1141,14 @@ def visualize_original_individual_curves(
             plot_one(axes[row_idx, cols_per_group + col], pid, is_last, show_ylabel=(col == 0))
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.subplots_adjust(wspace=0.2, hspace=0.3)
+
+    # Add extra space between P-match and T-match columns
+    for row_idx in range(n_rows):
+        for col_idx in range(cols_per_group, n_cols):
+            ax = axes[row_idx, col_idx]
+            pos = ax.get_position()
+            ax.set_position([pos.x0 + 0.03, pos.y0, pos.width, pos.height])
 
     # Column headers (centered over each group's columns)
     fig.text(0.25, 0.98, "P-match", ha="center", va="top", fontsize=12, color="#000000")
@@ -1173,7 +1181,7 @@ def visualize_original_aggregate(
         "T": "T-match",
     }
 
-    def plot_aggregate(ax, block_acc_data, slopes_data, title):
+    def plot_aggregate(ax, block_acc_data, slopes_data, title, y_lim=None):
         """Helper to plot one aggregate view"""
         endpoints = {}
 
@@ -1207,8 +1215,8 @@ def visualize_original_aggregate(
                 # P-match: position below the curve
                 y_offset = -2.0
                 va = "top"
-            ax.text(x + 0.2, y + y_offset, f"{labels[cond]}  LR={lr:.1f}",
-                    color=color, fontsize=9, va=va, ha="left")
+            ax.text(x - 0.5, y + y_offset, f"{labels[cond]}  LR={lr:.1f}",
+                    color=color, fontsize=9, va=va, ha="center")
 
         # Tufte-style axis
         ax.spines["top"].set_visible(False)
@@ -1226,14 +1234,25 @@ def visualize_original_aggregate(
         ax.set_ylabel("Accuracy (%)", fontsize=10, color="black")
         ax.tick_params(axis="y", colors="black", length=3, width=0.5)
 
+        # Set y-axis limits if provided
+        if y_lim is not None:
+            ax.set_ylim(y_lim)
+
         ax.set_title(title, fontsize=11)
 
     # Show side-by-side comparison if requested
     if show_side_by_side and min_lr_1st_day is not None:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
+        # Compute shared y-axis range from all data (unfiltered)
+        all_means = block_acc.groupby(["cond", "block"])["accuracy"].mean()
+        y_min = all_means.min()
+        y_max = all_means.max()
+        y_padding = (y_max - y_min) * 0.1
+        y_lim = (y_min - y_padding, y_max + y_padding)
+
         # Left: All data
-        plot_aggregate(ax1, block_acc, slopes, "All participants")
+        plot_aggregate(ax1, block_acc, slopes, "All participants", y_lim=y_lim)
 
         # Right: Filtered data
         valid_pids = slopes[slopes["b"] >= min_lr_1st_day]["participant_id"].unique()
@@ -1241,7 +1260,7 @@ def visualize_original_aggregate(
         slopes_filtered = slopes[slopes["participant_id"].isin(valid_pids)]
         n_excluded = len(slopes["participant_id"].unique()) - len(valid_pids)
         plot_aggregate(ax2, block_acc_filtered, slopes_filtered,
-                      f"Filtered (LR ≥ {min_lr_1st_day}, excluded {n_excluded})")
+                      f"Filtered (LR ≥ {min_lr_1st_day}, excluded {n_excluded})", y_lim=y_lim)
 
         fig.suptitle("Original Paper Data: P-match vs T-match", fontsize=13, y=0.98)
         fig.tight_layout(rect=(0, 0, 1, 0.96))
