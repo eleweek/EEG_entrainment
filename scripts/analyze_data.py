@@ -1488,6 +1488,19 @@ def main():
         visualize_original_individual_curves(tc_block_acc, tc_slopes, max_per_group=20, cols_per_group=3,
                                             cond_labels={"T": "T-match", "C": "Arrhythmic Control"})
 
+        # Load P-match vs Control
+        print("\nLoading P-match vs Control comparison...")
+        pc_block_acc, pc_slopes = load_original_paper_data(args.original_data_dir, groups={1: "P", 4: "C"})
+        print(f"Loaded {len(pc_slopes)} participants (P-match and Control)")
+
+        # Print fitted slopes
+        print("\n=== Original Paper Fitted slopes (P-match vs Control) ===")
+        print(pc_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
+
+        # Visualize P-match vs Control
+        visualize_original_individual_curves(pc_block_acc, pc_slopes, max_per_group=20, cols_per_group=3,
+                                            cond_labels={"P": "P-match", "C": "Arrhythmic Control"})
+
         plt.show()
         return
 
