@@ -945,7 +945,10 @@ def parse_participant_list(value: str | None) -> list[str] | None:
 # Original paper data adapters
 # -----------------------------
 
-def load_original_paper_data(data_dir: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_original_paper_data(
+    data_dir: str,
+    groups: dict[int, str] | None = None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Load and convert original paper data (Michael et al., 2023) to our format.
 
@@ -953,13 +956,18 @@ def load_original_paper_data(data_dir: str) -> tuple[pd.DataFrame, pd.DataFrame]
     - AccPerLat.csv: accuracy per block, 3 rows per subject (3 latency conditions)
     - groupID: 1=Peak-Match (P), 2=Trough-Match (T), 3=Trough-NonMatch, 4=Control
 
-    We focus on P-match (groupID=1) vs T-match (groupID=2).
+    Args:
+        data_dir: Path to directory containing AccPerLat.csv
+        groups: Dict mapping groupID to condition label. Default: {1: "P", 2: "T"} for P-match vs T-match
 
     Returns:
         block_acc: DataFrame with [participant_id, cond, block, accuracy]
         slopes: DataFrame with fitted slopes per participant
     """
     import os
+
+    if groups is None:
+        groups = {1: "P", 2: "T"}  # Default: P-match vs T-match
 
     acc_path = os.path.join(data_dir, "AccPerLat.csv")
     df_acc = pd.read_csv(acc_path)
@@ -979,10 +987,8 @@ def load_original_paper_data(data_dir: str) -> tuple[pd.DataFrame, pd.DataFrame]
             df_acc.loc[row_idx, 'assumed_subID'] = subject_num
 
     # Convert to long format, averaging across latencies
-    # Focus on P-match (1) and T-match (2) only
     rows = []
-    for gid in [1, 2]:  # P-match, T-match
-        cond = "P" if gid == 1 else "T"
+    for gid, cond in groups.items():
         group_data = df_acc[df_acc['groupID'] == gid]
 
         for subj in range(1, 21):
@@ -1041,33 +1047,52 @@ def visualize_original_individual_curves(
     max_per_group: int = 6,
     cols_per_group: int = 3,
     seed: int = 42,
+    cond_labels: dict[str, str] | None = None,
 ) -> plt.Figure:
     """
     Visualize individual learning curves from original paper data.
 
-    Layout: cols_per_group columns for P-match (left) + cols_per_group columns for T-match (right),
+    Layout: cols_per_group columns for condition 1 (left) + cols_per_group columns for condition 2 (right),
     limited to max_per_group random samples per condition.
+
+    Args:
+        block_acc: Block accuracy data
+        slopes: Fitted slopes data
+        max_per_group: Maximum participants to show per condition
+        cols_per_group: Number of columns per condition
+        seed: Random seed for sampling
+        cond_labels: Dict mapping condition codes to display labels. Default: {"P": "P-match", "T": "T-match"}
     """
     np.random.seed(seed)
 
+    if cond_labels is None:
+        cond_labels = {"P": "P-match", "T": "T-match"}
+
+    # Get the two conditions from the data
+    conditions = sorted(slopes["cond"].unique())
+    if len(conditions) != 2:
+        raise ValueError(f"Expected 2 conditions, got {len(conditions)}: {conditions}")
+
+    cond1, cond2 = conditions
+
     # Split by condition
-    p_pids = slopes[slopes["cond"] == "P"]["participant_id"].unique()
-    t_pids = slopes[slopes["cond"] == "T"]["participant_id"].unique()
+    cond1_pids = slopes[slopes["cond"] == cond1]["participant_id"].unique()
+    cond2_pids = slopes[slopes["cond"] == cond2]["participant_id"].unique()
 
     # Sample if needed
-    if len(p_pids) > max_per_group:
-        p_pids = np.random.choice(p_pids, max_per_group, replace=False)
-    if len(t_pids) > max_per_group:
-        t_pids = np.random.choice(t_pids, max_per_group, replace=False)
+    if len(cond1_pids) > max_per_group:
+        cond1_pids = np.random.choice(cond1_pids, max_per_group, replace=False)
+    if len(cond2_pids) > max_per_group:
+        cond2_pids = np.random.choice(cond2_pids, max_per_group, replace=False)
 
-    # Layout: cols_per_group P-match + cols_per_group T-match per row
+    # Layout: cols_per_group for cond1 + cols_per_group for cond2 per row
     n_cols = cols_per_group * 2
-    n_rows = max(math.ceil(len(p_pids) / cols_per_group), math.ceil(len(t_pids) / cols_per_group))
+    n_rows = max(math.ceil(len(cond1_pids) / cols_per_group), math.ceil(len(cond2_pids) / cols_per_group))
 
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.5 * n_cols, 1.5 * n_rows), squeeze=False)
 
     # Global y-axis range across displayed participants only
-    displayed_pids = list(p_pids) + list(t_pids)
+    displayed_pids = list(cond1_pids) + list(cond2_pids)
     displayed_acc = block_acc[block_acc["participant_id"].isin(displayed_pids)]["accuracy"].values
     y_min, y_max = displayed_acc.min(), displayed_acc.max()
     y_padding = (y_max - y_min) * 0.05
@@ -1128,31 +1153,31 @@ def visualize_original_individual_curves(
     for row_idx in range(n_rows):
         is_last = row_idx == n_rows - 1
 
-        # P-match: columns 0 to cols_per_group-1
+        # Condition 1: columns 0 to cols_per_group-1
         for col in range(cols_per_group):
-            p_idx = row_idx * cols_per_group + col
-            pid = p_pids[p_idx] if p_idx < len(p_pids) else None
+            idx = row_idx * cols_per_group + col
+            pid = cond1_pids[idx] if idx < len(cond1_pids) else None
             plot_one(axes[row_idx, col], pid, is_last, show_ylabel=(col == 0))
 
-        # T-match: columns cols_per_group to n_cols-1
+        # Condition 2: columns cols_per_group to n_cols-1
         for col in range(cols_per_group):
-            t_idx = row_idx * cols_per_group + col
-            pid = t_pids[t_idx] if t_idx < len(t_pids) else None
+            idx = row_idx * cols_per_group + col
+            pid = cond2_pids[idx] if idx < len(cond2_pids) else None
             plot_one(axes[row_idx, cols_per_group + col], pid, is_last, show_ylabel=(col == 0))
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.subplots_adjust(wspace=0.2, hspace=0.3)
 
-    # Add extra space between P-match and T-match columns
+    # Add extra space between condition 1 and condition 2 columns
     for row_idx in range(n_rows):
         for col_idx in range(cols_per_group, n_cols):
             ax = axes[row_idx, col_idx]
             pos = ax.get_position()
-            ax.set_position([pos.x0 + 0.03, pos.y0, pos.width, pos.height])
+            ax.set_position([pos.x0 + 0.01, pos.y0, pos.width, pos.height])
 
     # Column headers (centered over each group's columns)
-    fig.text(0.25, 0.98, "P-match", ha="center", va="top", fontsize=12, color="#000000")
-    fig.text(0.75, 0.98, "T-match", ha="center", va="top", fontsize=12, color="#000000")
+    fig.text(0.25, 0.98, cond_labels[cond1], ha="center", va="top", fontsize=12, color="#000000")
+    fig.text(0.75, 0.98, cond_labels[cond2], ha="center", va="top", fontsize=12, color="#000000")
 
     return fig
 
@@ -1435,18 +1460,34 @@ def main():
     # Handle original paper data mode (after replication data loaded, so we can compare)
     if args.original_data_dir is not None:
         print(f"\nLoading original paper data from {args.original_data_dir}...")
+
+        # Load P-match vs T-match
         orig_block_acc, orig_slopes = load_original_paper_data(args.original_data_dir)
         print(f"Loaded {len(orig_slopes)} participants (P-match and T-match)")
 
         # Print fitted slopes
-        print("\n=== Original Paper Fitted slopes ===")
+        print("\n=== Original Paper Fitted slopes (P-match vs T-match) ===")
         print(orig_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
 
-        # Visualize
+        # Visualize P-match vs T-match
         visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=20, cols_per_group=3)
         # Show comparison with replication data (3 columns)
         visualize_original_aggregate(orig_block_acc, orig_slopes, min_lr_1st_day=-1,
                                      show_side_by_side=True, replication_data=(block_acc, slopes))
+
+        # Load T-match vs Control
+        print("\nLoading T-match vs Control comparison...")
+        tc_block_acc, tc_slopes = load_original_paper_data(args.original_data_dir, groups={2: "T", 4: "C"})
+        print(f"Loaded {len(tc_slopes)} participants (T-match and Control)")
+
+        # Print fitted slopes
+        print("\n=== Original Paper Fitted slopes (T-match vs Control) ===")
+        print(tc_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
+
+        # Visualize T-match vs Control
+        visualize_original_individual_curves(tc_block_acc, tc_slopes, max_per_group=20, cols_per_group=3,
+                                            cond_labels={"T": "T-match", "C": "Arrhythmic Control"})
+
         plt.show()
         return
 
