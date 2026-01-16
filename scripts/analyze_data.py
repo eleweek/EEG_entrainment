@@ -513,6 +513,107 @@ def visualize_offset_vs_lr(slopes: pd.DataFrame) -> plt.Figure:
     return fig
 
 
+def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> plt.Figure:
+    """
+    Plot average block accuracies for T-first and P-first groups on both days.
+
+    - Day 1: blocks 1-8, Day 2: blocks 9-16 (continuous x-axis)
+    - T-first in blue shades, P-first in green shades
+    - Day 1 = dark, Day 2 = light
+    - Fit log-linear curves separately for each day
+    - Tufte-style: minimal, direct labeling
+    """
+    # Determine each participant's first-day condition (group)
+    day1_cond = (
+        slopes[slopes["day_index"] == 1][["participant_id", "cond"]]
+        .drop_duplicates()
+        .set_index("participant_id")["cond"]
+    )
+
+    # Add group to block_acc
+    acc_with_group = block_acc.copy()
+    acc_with_group["group"] = acc_with_group["participant_id"].map(day1_cond)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    # Colors: T-first = blue, P-first = green; Day 1 = dark, Day 2 = light
+    colors = {
+        ("P", 1): "#2d8a2d",  # P-first, Day 1 (dark green)
+        ("P", 2): "#7dca7d",  # P-first, Day 2 (light green)
+        ("T", 1): "#1f5f8a",  # T-first, Day 1 (dark blue)
+        ("T", 2): "#6fb3d9",  # T-first, Day 2 (light blue)
+    }
+
+    # Store endpoints for direct labeling
+    endpoints = {}
+
+    for group in ["P", "T"]:
+        for day in [1, 2]:
+            # Filter data
+            day_acc = acc_with_group[(acc_with_group["day_index"] == day) & (acc_with_group["group"] == group)]
+
+            # Compute mean accuracy per block
+            grp_means = day_acc.groupby("block")["accuracy"].mean().reset_index()
+            blocks_original = grp_means["block"].values
+            acc = grp_means["accuracy"].values
+
+            # Shift Day 2 blocks to 9-16
+            blocks_plot = blocks_original + (8 if day == 2 else 0)
+
+            color = colors[(group, day)]
+
+            # Plot dots - small, unobtrusive
+            ax.scatter(blocks_plot, acc, c=color, s=20, zorder=3)
+
+            # Fit log-linear curve (using original block numbers 1-8)
+            fit = fit_learning_rate(blocks_original, acc, method="ols")
+            x_fit_original = np.linspace(1, 8, 100)
+            x_fit_plot = x_fit_original + (8 if day == 2 else 0)
+            y_fit = log_linear(x_fit_original, fit.a, fit.b)
+            ax.plot(x_fit_plot, y_fit, color=color, linewidth=1.2, zorder=2)
+
+            # Store endpoint for direct labeling
+            endpoints[(group, day)] = (x_fit_plot[-1], y_fit[-1], fit.b)
+
+    # Direct labeling (Tufte-style: no legend)
+    # T-first labels above curves, P-first labels below
+    label_names = {
+        ("T", 1): "T-match",
+        ("T", 2): "T→P-match",
+        ("P", 1): "P-match",
+        ("P", 2): "P→T-match",
+    }
+    for (group, day), (x, y, lr) in endpoints.items():
+        color = colors[(group, day)]
+        # T-first: label above (positive offset), P-first: label below (negative offset)
+        y_offset = 2 if group == "T" else -2
+        va = "bottom" if group == "T" else "top"
+        ax.text(x - 3.5, y + y_offset, f"{label_names[(group, day)]}  LR={lr:.1f}",
+                color=color, fontsize=8, va=va, ha="center")
+
+    # Minimal day separator
+    ax.axvline(x=8.5, color="#dddddd", linewidth=0.5, zorder=0)
+
+    # Tufte-style axis
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.5)
+    ax.spines["bottom"].set_linewidth(0.5)
+    ax.spines["left"].set_color("#666666")
+    ax.spines["bottom"].set_color("#666666")
+
+    ax.set_xlim(0.5, 18.5)
+    ax.set_xticks([4.5, 12.5])
+    ax.set_xticklabels(["Day 1", "Day 2"], fontsize=9, color="#666666")
+    ax.tick_params(axis="x", length=0)
+
+    ax.set_ylabel("Accuracy (%)", fontsize=9, color="#666666")
+    ax.tick_params(axis="y", colors="#666666", length=3, width=0.5)
+
+    fig.tight_layout()
+    return fig
+
+
 def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> plt.Figure:
     """
     Create visualization of accuracy and learning rate fits for all participants.
@@ -760,6 +861,7 @@ def main():
     # Visualize
     visualize_learning_curves(block_acc, slopes)
     visualize_offset_vs_lr(slopes)
+    visualize_group_average_both_days(block_acc, slopes)
     plt.show()
 
 
