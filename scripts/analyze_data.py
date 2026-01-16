@@ -265,23 +265,25 @@ def run_h1_within_subject(slopes: pd.DataFrame) -> None:
     p_one  = float(res.pvalue)
     df     = float(res.df)  # SciPy>=1.10 returns df on result object
 
-    # SciPy 95% CI for mean(d) (two-sided CI; that's standard even for one-sided tests)
-    ci = res.confidence_interval(confidence_level=0.95)
-    ci_lo, ci_hi = float(ci.low), float(ci.high)
+    # One-sided 95% CI (lower bound only)
+    ci_one = res.confidence_interval(confidence_level=0.95)
+    ci_one_lo = float(ci_one.low)
+
+    # Two-sided 95% CI (for effect size estimation)
+    res_two = stats.ttest_1samp(diffs, popmean=0.0, alternative="two-sided")
+    ci_two = res_two.confidence_interval(confidence_level=0.95)
+    ci_two_lo, ci_two_hi = float(ci_two.low), float(ci_two.high)
 
     m  = float(np.mean(diffs))     # mean difference
     sd = float(np.std(diffs, ddof=1))  # sample SD
     dz = cohens_dz(diffs)          # effect size (SciPy doesn't provide this)
 
-    # # Also report individual condition means ± SD
-    # b_T = b_by["T"].to_numpy(float)
-    # b_P = b_by["P"].to_numpy(float)
-
     print("\n=== H1 (confirmatory): within-subject T > P on slope b ===")
     print(f"N completers: {n}")
     print(f"Difference (T-P): {m:.2f} ± {sd:.2f} (mean ± SD)")
     print(f"t({df:.0f}) = {t_stat:.4f}, one-sided p = {p_one:.6g}")
-    print(f"95% CI for mean(d): [{ci_lo:.2f}, {ci_hi:.2f}]")
+    print(f"95% CI (one-sided): [{ci_one_lo:.2f}, ∞)")
+    print(f"95% CI (two-sided): [{ci_two_lo:.2f}, {ci_two_hi:.2f}]")
     print(f"Cohen's dz: {dz:.4f}")
 
 
@@ -334,6 +336,12 @@ def run_between_groups_test(
     ci = res.confidence_interval(confidence_level=0.95)
     ci_lo, ci_hi = float(ci.low), float(ci.high)
 
+    # For one-sided tests, also compute two-sided CI for effect size estimation
+    if not two_sided:
+        res_two = stats.ttest_ind(xT, xP, equal_var=False, alternative="two-sided")
+        ci_two = res_two.confidence_interval(confidence_level=0.95)
+        ci_two_lo, ci_two_hi = float(ci_two.low), float(ci_two.high)
+
     mT, sdT = float(np.mean(xT)), float(np.std(xT, ddof=1))
     mP, sdP = float(np.mean(xP)), float(np.std(xP, ddof=1))
     diff = mT - mP
@@ -363,7 +371,11 @@ def run_between_groups_test(
     print(f"P-match: {mP:.2f} ± {sdP:.2f} (mean ± SD)")
     print(f"Difference (T-P): {diff:.2f}")
     print(f"Welch t({df:.2f}) = {t_stat:.4f}, {sided_label} p = {p_val:.6g}")
-    print(f"95% CI for diff(T-P): [{ci_lo:.2f}, {ci_hi:.2f}]")
+    if two_sided:
+        print(f"95% CI for diff(T-P): [{ci_lo:.2f}, {ci_hi:.2f}]")
+    else:
+        print(f"95% CI (one-sided): [{ci_lo:.2f}, ∞)")
+        print(f"95% CI (two-sided): [{ci_two_lo:.2f}, {ci_two_hi:.2f}]")
     print(f"Hedges' g: {g:.4f}")
     print(f"Permutation p ({sided_label}, {n_perm} perms): {p_perm:.6g}")
 
@@ -599,16 +611,17 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_linewidth(0.5)
     ax.spines["bottom"].set_linewidth(0.5)
-    ax.spines["left"].set_color("#666666")
-    ax.spines["bottom"].set_color("#666666")
+    ax.spines["left"].set_color("black")
+    ax.spines["bottom"].set_color("black")
 
     ax.set_xlim(0.5, 18.5)
-    ax.set_xticks([4.5, 12.5])
-    ax.set_xticklabels(["Day 1", "Day 2"], fontsize=9, color="#666666")
-    ax.tick_params(axis="x", length=0)
+    ax.set_xticks(list(range(1, 9)) + list(range(9, 17)))
+    ax.set_xticklabels(list(range(1, 9)) + list(range(1, 9)), fontsize=8, color="black")
+    ax.tick_params(axis="x", length=3, width=0.5)
+    ax.set_xlabel("Block", fontsize=9, color="black")
 
-    ax.set_ylabel("Accuracy (%)", fontsize=9, color="#666666")
-    ax.tick_params(axis="y", colors="#666666", length=3, width=0.5)
+    ax.set_ylabel("Accuracy (%)", fontsize=9, color="black")
+    ax.tick_params(axis="y", colors="black", length=3, width=0.5)
 
     fig.tight_layout()
     return fig
