@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import math
 import sqlite3
 from dataclasses import dataclass
 import pingouin as pg
@@ -32,18 +33,19 @@ class FitResult:
     n_points: int
 
 
-def fit_learning_rate_ols(blocks: np.ndarray, acc: np.ndarray) -> FitResult:
+def fit_learning_rate_ols(blocks: np.ndarray, acc: np.ndarray, min_points: int = 3) -> FitResult:
     """
     Fit accuracy = a + b*log(block) using OLS (L2 loss).
 
-    blocks: array of block indices (>=1)
-    acc: array of accuracies in [0,1]
+    blocks: array of block indices (>=1), can be fractional
+    acc: array of accuracies in [0,1] or [0,100]
+    min_points: minimum number of points required for fitting
     """
     blocks = np.asarray(blocks, dtype=float)
     acc = np.asarray(acc, dtype=float)
 
-    if not (3 <= len(blocks) <= 8):
-        raise ValueError(f"Unexpected number of blocks {len(blocks)}. Expected: 3-8")
+    if len(blocks) < min_points:
+        raise ValueError(f"Need at least {min_points} points, got {len(blocks)}")
 
     # Initial guess: a ~= acc at first block, b small
     p0 = (float(acc[0]), 0.01)
@@ -64,18 +66,19 @@ def fit_learning_rate_ols(blocks: np.ndarray, acc: np.ndarray) -> FitResult:
     return FitResult(a=float(a_hat), b=float(b_hat), a_se=a_se, b_se=b_se, r2=r2, n_points=len(blocks))
 
 
-def fit_learning_rate_l1(blocks: np.ndarray, acc: np.ndarray) -> FitResult:
+def fit_learning_rate_l1(blocks: np.ndarray, acc: np.ndarray, min_points: int = 3) -> FitResult:
     """
     Fit accuracy = a + b*log(block) using L1 loss (median regression).
 
-    blocks: array of block indices (>=1)
-    acc: array of accuracies in [0,1]
+    blocks: array of block indices (>=1), can be fractional
+    acc: array of accuracies in [0,1] or [0,100]
+    min_points: minimum number of points required for fitting
     """
     blocks = np.asarray(blocks, dtype=float)
     acc = np.asarray(acc, dtype=float)
 
-    if not (3 <= len(blocks) <= 8):
-        raise ValueError(f"Unexpected number of blocks {len(blocks)}. Expected: 3-8")
+    if len(blocks) < min_points:
+        raise ValueError(f"Need at least {min_points} points, got {len(blocks)}")
 
     # Design matrix: [1, log(block)]
     X = sm.add_constant(np.log(blocks))
@@ -205,6 +208,65 @@ def add_day_index(df_trials: pd.DataFrame) -> pd.DataFrame:
     return df_trials.merge(
         sessions, on=["participant_id", "session_id", "start_ts"], how="left"
     )
+
+
+def compute_sliding_window_accuracy(
+    trials: pd.DataFrame,
+    window_size: int = 100,
+    step_size: int | None = None,
+    n_blocks: int = 8,
+) -> pd.DataFrame:
+    """
+    Compute accuracy using a sliding window over trials.
+
+    Returns a DataFrame with fractional block positions (1.0 to n_blocks)
+    and corresponding accuracies.
+
+    Args:
+        trials: DataFrame with columns [participant_id, session_id, day_index, cond, trial_index, correct]
+        window_size: Number of trials in each window
+        step_size: Step between windows (default: window_size // 8 for ~64 points per session)
+        n_blocks: Number of blocks to map to (for x-axis scaling)
+
+    Returns:
+        DataFrame with columns [participant_id, session_id, day_index, cond, block, accuracy]
+        where 'block' is a fractional value from 1.0 to n_blocks
+    """
+    if step_size is None:
+        step_size = max(1, window_size // 8)
+
+    rows = []
+
+    for (pid, sid, day), session_trials in trials.groupby(
+        ["participant_id", "session_id", "day_index"], sort=True
+    ):
+        session_trials = session_trials.sort_values("trial_index").reset_index(drop=True)
+        n_trials = len(session_trials)
+        cond = session_trials["cond"].iloc[0]
+
+        # Slide window over trials
+        for start in range(0, n_trials - window_size + 1, step_size):
+            end = start + window_size
+            window = session_trials.iloc[start:end]
+            acc = window["correct"].mean() * 100  # Convert to percentage
+
+            # Map center of window to fractional block position
+            # Center of window in trial space (0 to n_trials-1)
+            center = (start + end - 1) / 2
+            # Map to block space (1.0 to n_blocks)
+            # trial 0 -> block 1.0, trial n_trials-1 -> block n_blocks
+            block_pos = 1.0 + (center / (n_trials - 1)) * (n_blocks - 1)
+
+            rows.append({
+                "participant_id": pid,
+                "session_id": sid,
+                "day_index": day,
+                "cond": cond,
+                "block": block_pos,
+                "accuracy": acc,
+            })
+
+    return pd.DataFrame(rows)
 
 
 def fit_slopes_per_session(block_acc: pd.DataFrame, method: str = "ols", drop_first_n_blocks: int = 0) -> pd.DataFrame:
@@ -548,7 +610,7 @@ def visualize_offset_vs_lr(slopes: pd.DataFrame) -> plt.Figure:
     return fig
 
 
-def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFrame, drop_first_n_blocks: int = 0) -> plt.Figure:
+def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFrame, drop_first_n_blocks: int = 0, use_sliding: bool = False) -> plt.Figure:
     """
     Plot average block accuracies for T-first and P-first groups on both days.
 
@@ -558,8 +620,8 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
     - Fit log-linear curves separately for each day
     - Tufte-style: minimal, direct labeling
     """
-    # Drop first N blocks if requested and renumber
-    if drop_first_n_blocks > 0:
+    # Drop first N blocks if requested and renumber (only for discrete blocks)
+    if drop_first_n_blocks > 0 and not use_sliding:
         block_acc = block_acc[block_acc["block"] > drop_first_n_blocks].copy()
         block_acc["block"] = block_acc["block"] - drop_first_n_blocks
     # Determine each participant's first-day condition (group)
@@ -596,8 +658,9 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
             blocks_original = grp_means["block"].values
             acc = grp_means["accuracy"].values
 
-            # Shift Day 2 blocks to 9-16
-            blocks_plot = blocks_original + (8 if day == 2 else 0)
+            # Shift Day 2 blocks for plotting (after Day 1's range)
+            max_block = 8 - drop_first_n_blocks if not use_sliding else 8
+            blocks_plot = blocks_original + (max_block if day == 2 else 0)
 
             color = colors[(group, day)]
 
@@ -605,11 +668,11 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
             ax.scatter(blocks_plot, acc, c=color, s=20, zorder=3)
 
             # Fit log-linear curve
-            min_block = blocks_original.min()
-            max_block = blocks_original.max()
+            min_b = blocks_original.min()
+            max_b = blocks_original.max()
             fit = fit_learning_rate(blocks_original, acc, method="ols")
-            x_fit_original = np.linspace(min_block, max_block, 100)
-            x_fit_plot = x_fit_original + (8 if day == 2 else 0)
+            x_fit_original = np.linspace(min_b, max_b, 100)
+            x_fit_plot = x_fit_original + (max_block if day == 2 else 0)
             y_fit = log_linear(x_fit_original, fit.a, fit.b)
             ax.plot(x_fit_plot, y_fit, color=color, linewidth=1.2, zorder=2)
 
@@ -633,7 +696,7 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
                 color=color, fontsize=8, va=va, ha="center")
 
     # Minimal day separator (at boundary between Day 1 and Day 2)
-    n_blocks = 8 - drop_first_n_blocks
+    n_blocks = 8 if use_sliding else 8 - drop_first_n_blocks
     ax.axvline(x=n_blocks + 0.5, color="#dddddd", linewidth=0.5, zorder=0)
 
     # Tufte-style axis
@@ -644,8 +707,7 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
     ax.spines["left"].set_color("black")
     ax.spines["bottom"].set_color("black")
 
-    # After renumbering, blocks are 1 to (8 - drop_first_n_blocks)
-    n_blocks = 8 - drop_first_n_blocks
+    # Set up x-axis ticks
     day1_ticks = list(range(1, n_blocks + 1))
     day2_ticks = list(range(n_blocks + 1, 2 * n_blocks + 1))
     ax.set_xlim(0.5, 2 * n_blocks + 0.5)
@@ -661,7 +723,7 @@ def visualize_group_average_both_days(block_acc: pd.DataFrame, slopes: pd.DataFr
     return fig
 
 
-def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame, drop_first_n_blocks: int = 0) -> plt.Figure:
+def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame, drop_first_n_blocks: int = 0, use_sliding: bool = False) -> plt.Figure:
     """
     Create visualization of accuracy and learning rate fits for all participants.
 
@@ -670,10 +732,12 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame, dro
       - Columns 2-3: T-first participant (Day 1, Day 2)
     Two participants per row (one from each group).
     """
-    # Drop first N blocks if requested and renumber
-    if drop_first_n_blocks > 0:
+    # Drop first N blocks if requested and renumber (only for discrete blocks)
+    if drop_first_n_blocks > 0 and not use_sliding:
         block_acc = block_acc[block_acc["block"] > drop_first_n_blocks].copy()
         block_acc["block"] = block_acc["block"] - drop_first_n_blocks
+
+    n_blocks = 8 if use_sliding else 8 - drop_first_n_blocks
 
     # Determine each participant's first-day condition
     day1_cond = (
@@ -731,8 +795,7 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame, dro
             b = day_slope["b"].iloc[0]
             r2 = day_slope["r2"].iloc[0]
 
-            # Blocks are renumbered to 1..n_blocks
-            n_blocks = 8 - drop_first_n_blocks
+            # Fit curve spans 1 to n_blocks
             x_fit = np.linspace(1, n_blocks, 100)
             y_fit = log_linear(x_fit, a, b)
             ax.plot(x_fit, y_fit, color=fit_color, linewidth=1, zorder=2)
@@ -753,7 +816,6 @@ def visualize_learning_curves(block_acc: pd.DataFrame, slopes: pd.DataFrame, dro
         ax.set_title(f"{pid}{fit_annotation}",
                      fontsize=9, loc="left", color="#000000")
 
-        n_blocks = 8 - drop_first_n_blocks
         ax.set_xlim(0.5, n_blocks + 0.5)
         ax.set_ylim(y_min, y_max)
         ax.set_xticks(range(1, n_blocks + 1))
@@ -819,6 +881,282 @@ def parse_participant_list(value: str | None) -> list[str] | None:
     return [p.strip() for p in value.split(",") if p.strip()]
 
 
+# -----------------------------
+# Original paper data adapters
+# -----------------------------
+
+def load_original_paper_data(data_dir: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Load and convert original paper data (Michael et al., 2023) to our format.
+
+    The paper data has:
+    - AccPerLat.csv: accuracy per block, 3 rows per subject (3 latency conditions)
+    - groupID: 1=Peak-Match (P), 2=Trough-Match (T), 3=Trough-NonMatch, 4=Control
+
+    We focus on P-match (groupID=1) vs T-match (groupID=2).
+
+    Returns:
+        block_acc: DataFrame with [participant_id, cond, block, accuracy]
+        slopes: DataFrame with fitted slopes per participant
+    """
+    import os
+
+    acc_path = os.path.join(data_dir, "AccPerLat.csv")
+    df_acc = pd.read_csv(acc_path)
+
+    blocks = ['block1', 'block2', 'block3', 'block4', 'block5', 'block6', 'block7', 'block8']
+
+    # Assign subject IDs (they cycle 1-20 within each group, 3 latencies each)
+    df_acc = df_acc.copy()
+    df_acc['assumed_subID'] = -1
+
+    for gid in sorted(df_acc['groupID'].unique()):
+        group_mask = df_acc['groupID'] == gid
+        group_rows = df_acc[group_mask].index
+        for idx, row_idx in enumerate(group_rows):
+            slot_in_latency = idx % 20
+            subject_num = slot_in_latency + 1
+            df_acc.loc[row_idx, 'assumed_subID'] = subject_num
+
+    # Convert to long format, averaging across latencies
+    # Focus on P-match (1) and T-match (2) only
+    rows = []
+    for gid in [1, 2]:  # P-match, T-match
+        cond = "P" if gid == 1 else "T"
+        group_data = df_acc[df_acc['groupID'] == gid]
+
+        for subj in range(1, 21):
+            subj_data = group_data[group_data['assumed_subID'] == subj]
+            if len(subj_data) != 3:
+                continue
+
+            # Average accuracy across 3 latencies for each block
+            avg_accs = subj_data[blocks].mean(axis=0).values * 100  # Convert to %
+
+            pid = f"orig_{cond}_{subj:02d}"
+            for block_idx, acc in enumerate(avg_accs, start=1):
+                rows.append({
+                    "participant_id": pid,
+                    "session_id": f"{pid}_s1",
+                    "day_index": 1,
+                    "cond": cond,
+                    "block": block_idx,
+                    "accuracy": acc,
+                })
+
+    block_acc = pd.DataFrame(rows)
+
+    # Fit slopes
+    slope_rows = []
+    for pid in block_acc["participant_id"].unique():
+        p_data = block_acc[block_acc["participant_id"] == pid]
+        cond = p_data["cond"].iloc[0]
+
+        fr = fit_learning_rate(
+            p_data["block"].to_numpy(float),
+            p_data["accuracy"].to_numpy(float),
+            method="ols",
+        )
+        slope_rows.append({
+            "participant_id": pid,
+            "session_id": f"{pid}_s1",
+            "day_index": 1,
+            "cond": cond,
+            "a": fr.a,
+            "b": fr.b,
+            "a_se": fr.a_se,
+            "b_se": fr.b_se,
+            "r2": fr.r2,
+            "n_points": fr.n_points,
+        })
+
+    slopes = pd.DataFrame(slope_rows)
+
+    return block_acc, slopes
+
+
+def visualize_original_individual_curves(
+    block_acc: pd.DataFrame,
+    slopes: pd.DataFrame,
+    max_per_group: int = 6,
+    cols_per_group: int = 3,
+    seed: int = 42,
+) -> plt.Figure:
+    """
+    Visualize individual learning curves from original paper data.
+
+    Layout: cols_per_group columns for P-match (left) + cols_per_group columns for T-match (right),
+    limited to max_per_group random samples per condition.
+    """
+    np.random.seed(seed)
+
+    # Split by condition
+    p_pids = slopes[slopes["cond"] == "P"]["participant_id"].unique()
+    t_pids = slopes[slopes["cond"] == "T"]["participant_id"].unique()
+
+    # Sample if needed
+    if len(p_pids) > max_per_group:
+        p_pids = np.random.choice(p_pids, max_per_group, replace=False)
+    if len(t_pids) > max_per_group:
+        t_pids = np.random.choice(t_pids, max_per_group, replace=False)
+
+    # Layout: cols_per_group P-match + cols_per_group T-match per row
+    n_cols = cols_per_group * 2
+    n_rows = max(math.ceil(len(p_pids) / cols_per_group), math.ceil(len(t_pids) / cols_per_group))
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.5 * n_cols, 1.5 * n_rows), squeeze=False)
+
+    # Global y-axis range across displayed participants only
+    displayed_pids = list(p_pids) + list(t_pids)
+    displayed_acc = block_acc[block_acc["participant_id"].isin(displayed_pids)]["accuracy"].values
+    y_min, y_max = displayed_acc.min(), displayed_acc.max()
+    y_padding = (y_max - y_min) * 0.05
+    y_min -= y_padding
+    y_max += y_padding
+
+    data_color = "#000000"
+    fit_color = "#888888"
+
+    def plot_one(ax, pid, is_last_row, show_ylabel):
+        if pid is None:
+            ax.set_visible(False)
+            return
+
+        p_data = block_acc[block_acc["participant_id"] == pid]
+        p_slope = slopes[slopes["participant_id"] == pid]
+
+        blocks = p_data["block"].values
+        acc = p_data["accuracy"].values
+
+        ax.scatter(blocks, acc, s=12, color=data_color, zorder=3)
+
+        fit_annotation = ""
+        if not p_slope.empty:
+            a = p_slope["a"].iloc[0]
+            b = p_slope["b"].iloc[0]
+            r2 = p_slope["r2"].iloc[0]
+
+            x_fit = np.linspace(1, 8, 100)
+            y_fit = log_linear(x_fit, a, b)
+            ax.plot(x_fit, y_fit, color=fit_color, linewidth=1, zorder=2)
+            fit_annotation = f"  LR={b:.2f}  R²={r2:.2f}"
+
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#aaaaaa")
+        ax.spines["bottom"].set_color("#aaaaaa")
+        ax.spines["left"].set_linewidth(0.5)
+        ax.spines["bottom"].set_linewidth(0.5)
+
+        ax.tick_params(axis="both", which="both", length=3, width=0.5, colors="#000000")
+        ax.set_title(f"{pid}{fit_annotation}", fontsize=9, loc="left", color="#000000")
+
+        ax.set_xlim(0.5, 8.5)
+        ax.set_ylim(y_min, y_max)
+        ax.set_xticks(range(1, 9))
+
+        if is_last_row:
+            ax.set_xlabel("Block", fontsize=8, color="#000000")
+        else:
+            ax.set_xticklabels([])
+
+        if show_ylabel:
+            ax.set_ylabel("Accuracy", fontsize=8, color="#000000")
+        else:
+            ax.set_yticklabels([])
+
+    for row_idx in range(n_rows):
+        is_last = row_idx == n_rows - 1
+
+        # P-match: columns 0 to cols_per_group-1
+        for col in range(cols_per_group):
+            p_idx = row_idx * cols_per_group + col
+            pid = p_pids[p_idx] if p_idx < len(p_pids) else None
+            plot_one(axes[row_idx, col], pid, is_last, show_ylabel=(col == 0))
+
+        # T-match: columns cols_per_group to n_cols-1
+        for col in range(cols_per_group):
+            t_idx = row_idx * cols_per_group + col
+            pid = t_pids[t_idx] if t_idx < len(t_pids) else None
+            plot_one(axes[row_idx, cols_per_group + col], pid, is_last, show_ylabel=(col == 0))
+
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+
+    # Column headers (centered over each group's columns)
+    fig.text(0.25, 0.98, "P-match", ha="center", va="top", fontsize=12, color="#000000")
+    fig.text(0.75, 0.98, "T-match", ha="center", va="top", fontsize=12, color="#000000")
+
+    return fig
+
+
+def visualize_original_aggregate(block_acc: pd.DataFrame, slopes: pd.DataFrame) -> plt.Figure:
+    """
+    Visualize aggregate learning curves for P-match vs T-match from original paper data.
+
+    Single day, two conditions overlaid.
+    """
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    colors = {
+        "P": "#2d8a2d",  # Green for P-match
+        "T": "#1f5f8a",  # Blue for T-match
+    }
+    labels = {
+        "P": "P-match (Peak)",
+        "T": "T-match (Trough)",
+    }
+
+    endpoints = {}
+
+    for cond in ["P", "T"]:
+        cond_acc = block_acc[block_acc["cond"] == cond]
+        grp_means = cond_acc.groupby("block")["accuracy"].mean().reset_index()
+        blocks = grp_means["block"].values
+        acc = grp_means["accuracy"].values
+
+        color = colors[cond]
+
+        # Plot dots
+        ax.scatter(blocks, acc, c=color, s=30, zorder=3)
+
+        # Fit and plot curve
+        fit = fit_learning_rate(blocks, acc, method="ols")
+        x_fit = np.linspace(1, 8, 100)
+        y_fit = log_linear(x_fit, fit.a, fit.b)
+        ax.plot(x_fit, y_fit, color=color, linewidth=1.5, zorder=2)
+
+        endpoints[cond] = (x_fit[-1], y_fit[-1], fit.b)
+
+    # Direct labeling
+    for cond, (x, y, lr) in endpoints.items():
+        color = colors[cond]
+        y_offset = 1.5 if cond == "T" else -1.5
+        va = "bottom" if cond == "T" else "top"
+        ax.text(x + 0.2, y + y_offset, f"{labels[cond]}  LR={lr:.1f}",
+                color=color, fontsize=9, va=va, ha="left")
+
+    # Tufte-style axis
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.5)
+    ax.spines["bottom"].set_linewidth(0.5)
+    ax.spines["left"].set_color("black")
+    ax.spines["bottom"].set_color("black")
+
+    ax.set_xlim(0.5, 8.5)
+    ax.set_xticks(range(1, 9))
+    ax.tick_params(axis="x", length=3, width=0.5)
+    ax.set_xlabel("Block", fontsize=10, color="black")
+
+    ax.set_ylabel("Accuracy (%)", fontsize=10, color="black")
+    ax.tick_params(axis="y", colors="black", length=3, width=0.5)
+
+    ax.set_title("Original Paper Data: P-match vs T-match (Michael et al., 2023)", fontsize=11)
+
+    fig.tight_layout()
+    return fig
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Analyze learning rate data from Glass pattern experiment"
@@ -872,6 +1210,20 @@ def main():
         default=0,
         help="Drop the first N trials from each session (to simulate practice trials, e.g., 50)"
     )
+    parser.add_argument(
+        "--sliding-window",
+        type=int,
+        default=0,
+        metavar="SIZE",
+        help="Use sliding window of SIZE trials instead of fixed blocks (e.g., 100). Produces ~64 points per session."
+    )
+    parser.add_argument(
+        "--original-data-dir",
+        type=str,
+        default=None,
+        metavar="DIR",
+        help="Load and visualize original paper data (Michael et al., 2023) from DIR instead of study DB"
+    )
 
     args = parser.parse_args()
 
@@ -882,6 +1234,22 @@ def main():
     # Validate mutually exclusive options
     if include_only is not None and exclude is not None:
         parser.error("Cannot use both --include-only-participants and --exclude-participants")
+
+    # Handle original paper data mode
+    if args.original_data_dir is not None:
+        print(f"Loading original paper data from {args.original_data_dir}...")
+        block_acc, slopes = load_original_paper_data(args.original_data_dir)
+        print(f"Loaded {len(slopes)} participants (P-match and T-match)")
+
+        # Print fitted slopes
+        print("\n=== Fitted slopes ===")
+        print(slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
+
+        # Visualize
+        visualize_original_individual_curves(block_acc, slopes, max_per_group=18, cols_per_group=3)
+        visualize_original_aggregate(block_acc, slopes)
+        plt.show()
+        return
 
     # Load data
     print(f"Loading trials from {args.db}...")
@@ -909,18 +1277,24 @@ def main():
     df = add_day_index(df)
 
     # Compute block accuracies (scaled to 0-100%)
-    block_acc = (
-        df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
-        .mean()
-        .reset_index(name="accuracy")
-    )
-    block_acc["accuracy"] = block_acc["accuracy"] * 100
+    if args.sliding_window > 0:
+        print(f"  Using sliding window of {args.sliding_window} trials")
+        block_acc = compute_sliding_window_accuracy(df, window_size=args.sliding_window)
+        use_sliding = True
+    else:
+        block_acc = (
+            df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
+            .mean()
+            .reset_index(name="accuracy")
+        )
+        block_acc["accuracy"] = block_acc["accuracy"] * 100
+        use_sliding = False
 
     # Fit learning rates
     print(f"Fitting with method: {args.fit_method}")
-    if args.drop_first_n_blocks > 0:
+    if args.drop_first_n_blocks > 0 and not use_sliding:
         print(f"  Dropping first {args.drop_first_n_blocks} block(s) from each session")
-    slopes = fit_slopes_per_session(block_acc, method=args.fit_method, drop_first_n_blocks=args.drop_first_n_blocks)
+    slopes = fit_slopes_per_session(block_acc, method=args.fit_method, drop_first_n_blocks=0 if use_sliding else args.drop_first_n_blocks)
 
     # Print fitted slopes
     print("\n=== Fitted slopes ===")
@@ -934,9 +1308,10 @@ def main():
     run_ancova_lr_controlling_offset(slopes)
 
     # Visualize
-    visualize_learning_curves(block_acc, slopes, drop_first_n_blocks=args.drop_first_n_blocks)
+    drop_n = 0 if use_sliding else args.drop_first_n_blocks
+    visualize_learning_curves(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding)
     visualize_offset_vs_lr(slopes)
-    visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=args.drop_first_n_blocks)
+    visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding)
     plt.show()
 
 
