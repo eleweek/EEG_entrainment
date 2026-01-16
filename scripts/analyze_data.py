@@ -1287,12 +1287,9 @@ def visualize_original_aggregate(
             rep_day1_slopes = rep_slopes[rep_slopes["day_index"] == 1].copy()
             plot_aggregate(ax3, rep_day1_acc, rep_day1_slopes, "Replication: Day 1", y_lim=y_lim)
 
-            # Add extra spacing before replication column
-            pos = ax3.get_position()
-            ax3.set_position([pos.x0 + 0.05, pos.y0, pos.width, pos.height])
 
         fig.suptitle("Learning Rate Comparison: Original vs Replication", fontsize=14, y=0.98)
-        fig.tight_layout(rect=(0, 0, 1, 0.96))
+        fig.tight_layout(rect=(0, 0, 1, 1))
     else:
         # Original single-panel behavior
         fig, ax = plt.subplots(figsize=(8, 5))
@@ -1446,7 +1443,7 @@ def main():
         print(orig_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
 
         # Visualize
-        visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=18, cols_per_group=3)
+        visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=20, cols_per_group=3)
         # Show comparison with replication data (3 columns)
         visualize_original_aggregate(orig_block_acc, orig_slopes, min_lr_1st_day=-1,
                                      show_side_by_side=True, replication_data=(block_acc, slopes))
