@@ -1041,6 +1041,82 @@ def load_original_paper_data(
     return block_acc, slopes
 
 
+def visualize_lr_strip_plot(
+    orig_p_slopes: pd.DataFrame,
+    orig_t_slopes: pd.DataFrame,
+    orig_tn_slopes: pd.DataFrame,
+    orig_c_slopes: pd.DataFrame,
+    rep_p_slopes: pd.DataFrame,
+    rep_t_slopes: pd.DataFrame,
+) -> plt.Figure:
+    """
+    Strip plot showing individual learning rates for each group.
+
+    Args:
+        orig_p_slopes: Original P-match slopes
+        orig_t_slopes: Original T-match slopes
+        orig_tn_slopes: Original T-nonmatch slopes
+        orig_c_slopes: Original Control slopes
+        rep_p_slopes: Replication P-match slopes (day 1)
+        rep_t_slopes: Replication T-match slopes (day 1)
+    """
+    import seaborn as sns
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # Prepare data in long format for seaborn
+    data_list = []
+    groups_info = [
+        ("T-match (original)", orig_t_slopes["b"].values, "#1f5f8a"),
+        ("P-match (original)", orig_p_slopes["b"].values, "#2d8a2d"),
+        ("T-nonmatch (original)", orig_tn_slopes["b"].values, "#9370DB"),
+        ("Arrhythmic Control (original)", orig_c_slopes["b"].values, "#666666"),
+        ("T-match (replication)", rep_t_slopes["b"].values, "#5fa3d6"),
+        ("P-match (replication)", rep_p_slopes["b"].values, "#5fc85f"),
+    ]
+
+    for label, values, color in groups_info:
+        for val in values:
+            data_list.append({"Group": label, "Learning Rate": val, "Color": color})
+
+    plot_data = pd.DataFrame(data_list)
+
+    # Create color palette
+    palette = {label: color for label, _, color in groups_info}
+
+    # Plot with swarmplot (stacks overlapping points naturally)
+    sns.swarmplot(data=plot_data, x="Learning Rate", y="Group",
+                  palette=palette, size=5, alpha=0.6,
+                  edgecolor='white', linewidth=0.5, ax=ax,
+                  order=[g[0] for g in groups_info])
+
+    # Add mean lines
+    for i, (label, values, color) in enumerate(groups_info):
+        mean = np.mean(values)
+        y_pos = i
+        ax.vlines(mean, y_pos - 0.2, y_pos + 0.2, color=color, linewidth=2, zorder=10)
+
+    # Add vertical line at zero
+    ax.axvline(x=0, color='black', linestyle='--', linewidth=0.5, alpha=0.5, zorder=0)
+
+    # Tufte-style
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.5)
+    ax.spines["bottom"].set_linewidth(0.5)
+    ax.spines["left"].set_color("black")
+    ax.spines["bottom"].set_color("black")
+
+    ax.tick_params(axis="both", colors="black", length=3, width=0.5)
+    ax.set_xlabel("Learning Rate", fontsize=10, color="black")
+    ax.set_ylabel("")
+    ax.set_title("Learning Rates by Group", fontsize=11, color="black")
+
+    fig.tight_layout()
+    fig.savefig("learning rates by group.png", dpi=150, bbox_inches="tight")
+    return fig
+
+
 def visualize_original_individual_curves(
     block_acc: pd.DataFrame,
     slopes: pd.DataFrame,
@@ -1179,6 +1255,7 @@ def visualize_original_individual_curves(
     fig.text(0.25, 0.98, cond_labels[cond1], ha="center", va="top", fontsize=12, color="#000000")
     fig.text(0.75, 0.98, cond_labels[cond2], ha="center", va="top", fontsize=12, color="#000000")
 
+    fig.savefig(f"original learning rates {cond_labels[cond1]} vs {cond_labels[cond2]}.png", dpi=150, bbox_inches="tight")
     return fig
 
 
@@ -1188,27 +1265,35 @@ def visualize_original_aggregate(
     min_lr_1st_day: float | None = None,
     show_side_by_side: bool = True,
     replication_data: tuple[pd.DataFrame, pd.DataFrame] | None = None,
+    control_data: tuple[pd.DataFrame, pd.DataFrame] | None = None,
+    show_control: bool = False,
+    show_filtered: bool = True,
 ) -> plt.Figure:
     """
     Visualize aggregate learning curves for P-match vs T-match from original paper data.
 
-    Single day, two conditions overlaid.
+    Single day, two or three conditions overlaid.
 
     Args:
         min_lr_1st_day: If set, exclude participants with LR below this threshold (e.g., 0 to exclude negative LRs)
         show_side_by_side: If True, show both unfiltered and filtered data side-by-side
         replication_data: Optional tuple of (block_acc, slopes) from replication study (day 1 only)
+        control_data: Optional tuple of (block_acc, slopes) for arrhythmic control group
+        show_control: If True, show control line on aggregate charts (default: False)
+        show_filtered: If True, show the middle filtered chart in side-by-side view (default: True)
     """
     colors = {
         "P": "#2d8a2d",  # Green for P-match
         "T": "#1f5f8a",  # Blue for T-match
+        "C": "#666666",  # Grey for Control
     }
     labels = {
         "P": "P-match",
         "T": "T-match",
+        "C": "Arrhythmic Control",
     }
 
-    def plot_aggregate(ax, block_acc_data, slopes_data, title, y_lim=None):
+    def plot_aggregate(ax, block_acc_data, slopes_data, title, y_lim=None, control_data_inner=None):
         """Helper to plot one aggregate view"""
         endpoints = {}
 
@@ -1231,13 +1316,38 @@ def visualize_original_aggregate(
 
             endpoints[cond] = (x_fit[-1], y_fit[-1], fit.b)
 
-        # Direct labeling: T-match on top, P-match on bottom
+        # Add control if provided
+        if control_data_inner is not None:
+            ctrl_block_acc, ctrl_slopes = control_data_inner
+            ctrl_acc = ctrl_block_acc[ctrl_block_acc["cond"] == "C"]
+            grp_means = ctrl_acc.groupby("block")["accuracy"].mean().reset_index()
+            blocks = grp_means["block"].values
+            acc = grp_means["accuracy"].values
+
+            color = colors["C"]
+
+            # Plot dots
+            ax.scatter(blocks, acc, c=color, s=30, zorder=3)
+
+            # Fit and plot curve
+            fit = fit_learning_rate(blocks, acc, method="ols")
+            x_fit = np.linspace(1, 8, 100)
+            y_fit = log_linear(x_fit, fit.a, fit.b)
+            ax.plot(x_fit, y_fit, color=color, linewidth=1.5, zorder=2)
+
+            endpoints["C"] = (x_fit[-1], y_fit[-1], fit.b)
+
+        # Direct labeling: T-match on top, P-match on bottom, Control in middle
         for cond, (x, y, lr) in endpoints.items():
             color = colors[cond]
             if cond == "T":
                 # T-match: position above the curve
                 y_offset = 2.0
                 va = "bottom"
+            elif cond == "C":
+                # Control: position in middle/right side
+                y_offset = 0.0
+                va = "center"
             else:  # P-match
                 # P-match: position below the curve
                 y_offset = -2.0
@@ -1269,15 +1379,20 @@ def visualize_original_aggregate(
 
     # Show side-by-side comparison if requested
     if show_side_by_side and min_lr_1st_day is not None:
-        # Determine number of subplots
-        n_plots = 3 if replication_data is not None else 2
-        fig, axes = plt.subplots(1, n_plots, figsize=(7 * n_plots, 5))
-        if n_plots == 2:
-            ax1, ax2 = axes
-        else:
-            ax1, ax2, ax3 = axes
+        # Determine number of subplots based on what we're showing
+        n_plots = 1  # Always show "all participants"
+        if show_filtered:
+            n_plots += 1
+        if replication_data is not None:
+            n_plots += 1
 
-        # Compute shared y-axis range from all data (original + replication if provided)
+        fig, axes = plt.subplots(1, n_plots, figsize=(7 * n_plots, 5))
+        if n_plots == 1:
+            axes = [axes]  # Make it iterable
+
+        ax_idx = 0  # Track which axis we're using
+
+        # Compute shared y-axis range from all data (original + replication + control if provided)
         all_means = block_acc.groupby(["cond", "block"])["accuracy"].mean()
         y_min = all_means.min()
         y_max = all_means.max()
@@ -1290,27 +1405,40 @@ def visualize_original_aggregate(
             y_min = min(y_min, rep_means.min())
             y_max = max(y_max, rep_means.max())
 
+        if control_data is not None and show_control:
+            ctrl_block_acc, ctrl_slopes = control_data
+            ctrl_means = ctrl_block_acc.groupby(["cond", "block"])["accuracy"].mean()
+            y_min = min(y_min, ctrl_means.min())
+            y_max = max(y_max, ctrl_means.max())
+
         y_padding = (y_max - y_min) * 0.1
         y_lim = (y_min - y_padding, y_max + y_padding)
 
+        # Decide whether to show control
+        ctrl_data_to_show = control_data if show_control else None
+
         # Left: All data from original paper
-        plot_aggregate(ax1, block_acc, slopes, "Original: All participants", y_lim=y_lim)
+        plot_aggregate(axes[ax_idx], block_acc, slopes, "Original: All participants", y_lim=y_lim, control_data_inner=ctrl_data_to_show)
+        ax_idx += 1
 
-        # Middle: Filtered data from original paper
-        valid_pids = slopes[slopes["b"] >= min_lr_1st_day]["participant_id"].unique()
-        block_acc_filtered = block_acc[block_acc["participant_id"].isin(valid_pids)]
-        slopes_filtered = slopes[slopes["participant_id"].isin(valid_pids)]
-        n_excluded = len(slopes["participant_id"].unique()) - len(valid_pids)
-        plot_aggregate(ax2, block_acc_filtered, slopes_filtered,
-                      f"Original: Filtered (LR ≥ {min_lr_1st_day}, n={n_excluded} excluded)", y_lim=y_lim)
+        # Middle: Filtered data from original paper (optional)
+        if show_filtered:
+            valid_pids = slopes[slopes["b"] >= min_lr_1st_day]["participant_id"].unique()
+            block_acc_filtered = block_acc[block_acc["participant_id"].isin(valid_pids)]
+            slopes_filtered = slopes[slopes["participant_id"].isin(valid_pids)]
+            n_excluded = len(slopes["participant_id"].unique()) - len(valid_pids)
+            plot_aggregate(axes[ax_idx], block_acc_filtered, slopes_filtered,
+                          f"Original: Filtered (LR ≥ {min_lr_1st_day}, n={n_excluded} excluded)", y_lim=y_lim, control_data_inner=ctrl_data_to_show)
+            ax_idx += 1
 
-        # Right: Replication day 1 (if provided)
+        # Right: Replication day 1 (if provided) - no control line here
         if replication_data is not None:
             rep_block_acc, rep_slopes = replication_data
             # Filter to day 1 only
             rep_day1_acc = rep_block_acc[rep_block_acc["day_index"] == 1].copy()
             rep_day1_slopes = rep_slopes[rep_slopes["day_index"] == 1].copy()
-            plot_aggregate(ax3, rep_day1_acc, rep_day1_slopes, "Replication: Day 1", y_lim=y_lim)
+            plot_aggregate(axes[ax_idx], rep_day1_acc, rep_day1_slopes, "Replication: Day 1", y_lim=y_lim, control_data_inner=None)
+            ax_idx += 1
 
 
         fig.suptitle("Learning Rate Comparison: Original vs Replication", fontsize=14, y=0.98)
@@ -1328,7 +1456,8 @@ def visualize_original_aggregate(
         else:
             title_suffix = ""
 
-        plot_aggregate(ax, block_acc, slopes, f"Original Paper Data: P-match vs T-match{title_suffix}")
+        ctrl_data_to_show = control_data if show_control else None
+        plot_aggregate(ax, block_acc, slopes, f"Original Paper Data: P-match vs T-match{title_suffix}", control_data_inner=ctrl_data_to_show)
         fig.tight_layout()
 
     return fig
@@ -1469,16 +1598,23 @@ def main():
         print("\n=== Original Paper Fitted slopes (P-match vs T-match) ===")
         print(orig_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
 
-        # Visualize P-match vs T-match
-        visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=20, cols_per_group=3)
-        # Show comparison with replication data (3 columns)
-        visualize_original_aggregate(orig_block_acc, orig_slopes, min_lr_1st_day=-1,
-                                     show_side_by_side=True, replication_data=(block_acc, slopes))
-
-        # Load T-match vs Control
+        # Load T-match vs Control (needed for aggregate chart)
         print("\nLoading T-match vs Control comparison...")
         tc_block_acc, tc_slopes = load_original_paper_data(args.original_data_dir, groups={2: "T", 4: "C"})
         print(f"Loaded {len(tc_slopes)} participants (T-match and Control)")
+
+        # Extract control data for aggregate chart
+        control_block_acc = tc_block_acc[tc_block_acc["cond"] == "C"]
+        control_slopes = tc_slopes[tc_slopes["cond"] == "C"]
+
+        # Visualize P-match vs T-match individual curves
+        visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=20, cols_per_group=3)
+
+        # Show comparison with replication data (2 columns: original all + replication)
+        visualize_original_aggregate(orig_block_acc, orig_slopes, min_lr_1st_day=-1,
+                                     show_side_by_side=True, replication_data=(block_acc, slopes),
+                                     control_data=(control_block_acc, control_slopes),
+                                     show_control=False, show_filtered=False)
 
         # Print fitted slopes
         print("\n=== Original Paper Fitted slopes (T-match vs Control) ===")
@@ -1500,6 +1636,131 @@ def main():
         # Visualize P-match vs Control
         visualize_original_individual_curves(pc_block_acc, pc_slopes, max_per_group=20, cols_per_group=3,
                                             cond_labels={"P": "P-match", "C": "Arrhythmic Control"})
+
+        # Load T-nonmatch data for strip plot
+        print("\nLoading T-nonmatch data...")
+        tn_block_acc, tn_slopes = load_original_paper_data(args.original_data_dir, groups={3: "TN"})
+        print(f"Loaded {len(tn_slopes)} participants (T-nonmatch)")
+
+        # Prepare data for strip plot
+        p_slopes_only = orig_slopes[orig_slopes["cond"] == "P"]
+        t_slopes_only = tc_slopes[tc_slopes["cond"] == "T"]
+        c_slopes_only = tc_slopes[tc_slopes["cond"] == "C"]
+        tn_slopes_only = tn_slopes[tn_slopes["cond"] == "TN"]
+
+        # Strip plot of individual learning rates by group
+        print("\nGenerating learning rate strip plot...")
+        rep_day1_slopes_for_strip = slopes[slopes["day_index"] == 1]
+        rep_p_slopes_only = rep_day1_slopes_for_strip[rep_day1_slopes_for_strip["cond"] == "P"]
+        rep_t_slopes_only = rep_day1_slopes_for_strip[rep_day1_slopes_for_strip["cond"] == "T"]
+        visualize_lr_strip_plot(
+            p_slopes_only, t_slopes_only, tn_slopes_only, c_slopes_only,
+            rep_p_slopes_only, rep_t_slopes_only
+        )
+
+        # T-tests: Compare replication vs original learning rates
+        print("\n=== T-tests: Replication vs Original Learning Rates ===")
+        from scipy import stats
+
+        # Filter to day 1 only for replication
+        rep_day1_slopes = slopes[slopes["day_index"] == 1]
+
+        # T-match comparison
+        orig_t_lr = orig_slopes[orig_slopes["cond"] == "T"]["b"].values
+        rep_t_lr = rep_day1_slopes[rep_day1_slopes["cond"] == "T"]["b"].values
+        t_result = stats.ttest_ind(rep_t_lr, orig_t_lr, equal_var=False)
+        print(f"\nT-match: Replication (n={len(rep_t_lr)}, mean={rep_t_lr.mean():.3f}) vs Original (n={len(orig_t_lr)}, mean={orig_t_lr.mean():.3f})")
+        print(f"  t({t_result.df:.1f}) = {t_result.statistic:.3f}, p = {t_result.pvalue:.4f}")
+
+        # P-match comparison (all participants)
+        orig_p_lr = orig_slopes[orig_slopes["cond"] == "P"]["b"].values
+        rep_p_lr = rep_day1_slopes[rep_day1_slopes["cond"] == "P"]["b"].values
+        p_result = stats.ttest_ind(rep_p_lr, orig_p_lr, equal_var=False)
+        print(f"\nP-match (all): Replication (n={len(rep_p_lr)}, mean={rep_p_lr.mean():.3f}) vs Original (n={len(orig_p_lr)}, mean={orig_p_lr.mean():.3f})")
+        print(f"  t({p_result.df:.1f}) = {p_result.statistic:.3f}, p = {p_result.pvalue:.4f}")
+
+        # P-match comparison (filtered: LR >= -1 on day 1)
+        orig_p_filtered_lr = orig_slopes[(orig_slopes["cond"] == "P") & (orig_slopes["b"] >= -1)]["b"].values
+        rep_p_filtered_lr = rep_day1_slopes[(rep_day1_slopes["cond"] == "P") & (rep_day1_slopes["b"] >= -1)]["b"].values
+        pf_result = stats.ttest_ind(rep_p_filtered_lr, orig_p_filtered_lr, equal_var=False)
+        print(f"\nP-match (filtered LR≥-1): Replication (n={len(rep_p_filtered_lr)}, mean={rep_p_filtered_lr.mean():.3f}) vs Original (n={len(orig_p_filtered_lr)}, mean={orig_p_filtered_lr.mean():.3f})")
+        print(f"  t({pf_result.df:.1f}) = {pf_result.statistic:.3f}, p = {pf_result.pvalue:.4f}")
+
+        # Mixed-effects ANCOVA: P-match replication vs original controlling for offset
+        print("\n=== ANCOVA: P-match (all) LR ~ study + offset ===")
+        print("Question: Is replication P-match LR higher than original, after controlling for offset?")
+
+        # Combine original and replication P-match data (all participants)
+        orig_p_data = orig_slopes[orig_slopes["cond"] == "P"].copy()
+        orig_p_data["study"] = "original"
+
+        rep_p_data = rep_day1_slopes[rep_day1_slopes["cond"] == "P"].copy()
+        rep_p_data["study"] = "replication"
+
+        combined_p = pd.concat([orig_p_data, rep_p_data], ignore_index=True)
+        combined_p["study_replication"] = (combined_p["study"] == "replication").astype(int)
+        combined_p["a_centered"] = combined_p["a"] - combined_p["a"].mean()
+
+        # Fit model: LR ~ study + offset
+        # Note: No random effects needed since each participant is in only one study
+        import statsmodels.formula.api as smf
+        model = smf.ols("b ~ study_replication + a_centered", data=combined_p)
+        result = model.fit()
+
+        print(result.summary())
+
+        coef_study = result.params["study_replication"]
+        pval_study = result.pvalues["study_replication"]
+        coef_offset = result.params["a_centered"]
+        pval_offset = result.pvalues["a_centered"]
+
+        print("\n--- Interpretation ---")
+        print(f"Study effect (replication vs original): {coef_study:.4f} (p = {pval_study:.4f})")
+        print(f"  -> At the same offset, replication P-match LR is {coef_study:.4f} {'higher' if coef_study > 0 else 'lower'} than original")
+        print(f"Offset effect: {coef_offset:.4f} (p = {pval_offset:.4f})")
+        print(f"  -> For each 1% increase in offset, LR changes by {coef_offset:.4f}")
+
+        if pval_study < 0.05:
+            print("\nConclusion: Replication effect is significant even after controlling for offset.")
+        else:
+            print("\nConclusion: Replication effect is NOT significant after controlling for offset.")
+
+        # ANCOVA on filtered data (LR >= -1)
+        print("\n=== ANCOVA: P-match (filtered LR≥-1) LR ~ study + offset ===")
+        print("Question: Same as above, but excluding participants with LR < -1")
+
+        # Combine filtered P-match data
+        orig_p_filtered_data = orig_slopes[(orig_slopes["cond"] == "P") & (orig_slopes["b"] >= -1)].copy()
+        orig_p_filtered_data["study"] = "original"
+
+        rep_p_filtered_data = rep_day1_slopes[(rep_day1_slopes["cond"] == "P") & (rep_day1_slopes["b"] >= -1)].copy()
+        rep_p_filtered_data["study"] = "replication"
+
+        combined_p_filtered = pd.concat([orig_p_filtered_data, rep_p_filtered_data], ignore_index=True)
+        combined_p_filtered["study_replication"] = (combined_p_filtered["study"] == "replication").astype(int)
+        combined_p_filtered["a_centered"] = combined_p_filtered["a"] - combined_p_filtered["a"].mean()
+
+        # Fit model on filtered data
+        model_filtered = smf.ols("b ~ study_replication + a_centered", data=combined_p_filtered)
+        result_filtered = model_filtered.fit()
+
+        print(result_filtered.summary())
+
+        coef_study_f = result_filtered.params["study_replication"]
+        pval_study_f = result_filtered.pvalues["study_replication"]
+        coef_offset_f = result_filtered.params["a_centered"]
+        pval_offset_f = result_filtered.pvalues["a_centered"]
+
+        print("\n--- Interpretation ---")
+        print(f"Study effect (replication vs original): {coef_study_f:.4f} (p = {pval_study_f:.4f})")
+        print(f"  -> At the same offset, replication P-match LR is {coef_study_f:.4f} {'higher' if coef_study_f > 0 else 'lower'} than original")
+        print(f"Offset effect: {coef_offset_f:.4f} (p = {pval_offset_f:.4f})")
+        print(f"  -> For each 1% increase in offset, LR changes by {coef_offset_f:.4f}")
+
+        if pval_study_f < 0.05:
+            print("\nConclusion: Replication effect is significant even after controlling for offset (filtered data).")
+        else:
+            print("\nConclusion: Replication effect is NOT significant after controlling for offset (filtered data).")
 
         plt.show()
         return
