@@ -1000,6 +1000,7 @@ def load_original_paper_data(
             avg_accs = subj_data[blocks].mean(axis=0).values * 100  # Convert to %
 
             pid = f"orig_{cond}_{subj:02d}"
+
             for block_idx, acc in enumerate(avg_accs, start=1):
                 rows.append({
                     "participant_id": pid,
@@ -1014,15 +1015,18 @@ def load_original_paper_data(
 
     # Fit slopes
     slope_rows = []
+    computed_lr_map = {}  # participant_id -> computed learning rate
+
     for pid in block_acc["participant_id"].unique():
-        p_data = block_acc[block_acc["participant_id"] == pid]
+        p_data = block_acc[block_acc["participant_id"] == pid].sort_values("block")
         cond = p_data["cond"].iloc[0]
 
-        fr = fit_learning_rate(
-            p_data["block"].to_numpy(float),
-            p_data["accuracy"].to_numpy(float),
-            method="ols",
-        )
+        blocks_arr = p_data["block"].to_numpy(float)
+        accuracy_arr = p_data["accuracy"].to_numpy(float)
+
+        fr = fit_learning_rate(blocks_arr, accuracy_arr, method="ols")
+        computed_lr_map[pid] = fr.b
+
         slope_rows.append({
             "participant_id": pid,
             "session_id": f"{pid}_s1",
@@ -1038,7 +1042,236 @@ def load_original_paper_data(
 
     slopes = pd.DataFrame(slope_rows)
 
+    # Comprehensive validation: compare with provided learning rates if available
+    print("\n" + "=" * 60)
+    print("VALIDATING LEARNING RATE COMPUTATION")
+    print("=" * 60)
+
+    # Check for groupLR_forLMM.csv (provided learning rates)
+    lr_provided_path = os.path.join(data_dir, "groupLR_forLMM.csv")
+
+    if os.path.exists(lr_provided_path):
+        df_lr_provided = pd.read_csv(lr_provided_path)
+        print(f"\nFound provided learning rates: {lr_provided_path}")
+        print(f"Columns: {list(df_lr_provided.columns)}")
+
+        # Map groupID to phase/match for comparison
+        # groupID: 1=Peak-Match (phase=1, match=1), 2=Trough-Match (phase=2, match=1),
+        #          3=Trough-NonMatch (phase=2, match=2), 4=Control
+        group_mapping = {
+            1: (1, 1, "P", "Peak-Match"),
+            2: (2, 1, "T", "Trough-Match"),
+            3: (2, 2, "TN", "Trough-NonMatch"),
+            4: (None, None, "C", "Control"),
+        }
+
+        # For validation, we need to load ALL groups, not just the requested ones
+        # Build a complete dataset for validation
+        all_validation_slopes = []
+        for gid in [1, 2, 3, 4]:
+            if gid in groups:
+                # Already computed, use existing data
+                cond = groups[gid]
+                group_slopes = slopes[slopes["cond"] == cond].copy()
+                group_slopes["groupID"] = gid
+                all_validation_slopes.append(group_slopes)
+            else:
+                # Need to compute this group for validation
+                phase, match, cond_code, label = group_mapping.get(gid, (None, None, None, None))
+                if phase is None:
+                    continue  # Skip control if no phase/match
+
+                group_data = df_acc[df_acc['groupID'] == gid]
+                if len(group_data) == 0:
+                    continue
+
+                # Compute slopes for this group
+                temp_slopes = []
+                for subj in range(1, 21):
+                    subj_data = group_data[group_data['assumed_subID'] == subj]
+                    if len(subj_data) != 3:
+                        continue
+
+                    avg_accs = subj_data[blocks].mean(axis=0).values * 100
+                    pid = f"validation_{cond_code}_{subj:02d}"
+
+                    # Create temporary block_acc data
+                    temp_blocks = np.arange(1, 9)
+                    fr = fit_learning_rate(temp_blocks, avg_accs, method="ols")
+
+                    temp_slopes.append({
+                        "participant_id": pid,
+                        "groupID": gid,
+                        "cond": cond_code,
+                        "b": fr.b,
+                    })
+
+                if temp_slopes:
+                    temp_df = pd.DataFrame(temp_slopes)
+                    all_validation_slopes.append(temp_df)
+
+        if all_validation_slopes:
+            validation_slopes_df = pd.concat(all_validation_slopes, ignore_index=True)
+
+            print("\n" + "-" * 60)
+            print("Comparing computed vs. provided learning rates:")
+            print("-" * 60)
+
+            mismatches = []
+            tolerance = 2.0  # Allow up to 2.0 difference in mean LR
+
+            for gid in [1, 2, 3, 4]:
+                if gid not in group_mapping:
+                    continue
+
+                phase, match, cond_code, label = group_mapping[gid]
+
+                # Get our computed learning rates for this group
+                computed_lr = validation_slopes_df[validation_slopes_df["groupID"] == gid]["b"].values
+
+                if len(computed_lr) == 0:
+                    continue  # Skip if we don't have data for this group
+
+                # Get provided learning rates for this group (if available)
+                if phase is not None and match is not None:
+                    provided_lr = df_lr_provided[
+                        (df_lr_provided['phase'] == phase) &
+                        (df_lr_provided['match'] == match)
+                    ]['LR'].values
+                else:
+                    # Control group might not be in the provided file
+                    provided_lr = np.array([])
+
+                if len(provided_lr) == 0:
+                    print(f"\n{label} (Group {gid}):")
+                    print("  No provided LR found in groupLR_forLMM.csv")
+                    continue
+
+                # Compute statistics
+                provided_mean = provided_lr.mean()
+                computed_mean = computed_lr.mean()
+                diff = abs(provided_mean - computed_mean)
+
+                # Sort both arrays for correlation
+                provided_sorted = np.sort(provided_lr)
+                computed_sorted = np.sort(computed_lr)
+
+                # Compute correlation (if same length)
+                if len(provided_lr) == len(computed_lr):
+                    corr = np.corrcoef(provided_sorted, computed_sorted)[0, 1]
+                else:
+                    corr = np.nan
+
+                print(f"\n{label} (Group {gid}):")
+                print(f"  Provided LR:  {provided_mean:7.3f} ± {provided_lr.std():6.3f} (n={len(provided_lr)})")
+                print(f"  Computed LR:  {computed_mean:7.3f} ± {computed_lr.std():6.3f} (n={len(computed_lr)})")
+                print(f"  |Difference|: {diff:7.3f}")
+                if not np.isnan(corr):
+                    print(f"  Correlation:  {corr:7.3f}", end="")
+
+            if diff > tolerance:
+                print(" ✗ MISMATCH!")
+                mismatches.append({
+                    'group': label,
+                    'provided': provided_mean,
+                    'computed': computed_mean,
+                    'diff': diff,
+                    'corr': corr
+                })
+            else:
+                print(" ✓ OK")
+
+        # Show example fit for one subject
+        if len(computed_lr_map) > 0:
+            example_pid = list(computed_lr_map.keys())[0]
+            example_data = block_acc[block_acc["participant_id"] == example_pid].sort_values("block")
+            example_slopes = slopes[slopes["participant_id"] == example_pid].iloc[0]
+
+            print("\n" + "-" * 60)
+            print(f"Example fit: {example_pid}")
+            print("-" * 60)
+            print(f"Fitted curve: y = {example_slopes['a']:.2f} + {example_slopes['b']:.2f}*log(x)")
+            print(f"Learning rate (b) = {example_slopes['b']:.3f}")
+            print(f"R² = {example_slopes['r2']:.3f}")
+            print("\nBlock | Accuracy | Fitted")
+            print("-" * 35)
+            for _, row in example_data.iterrows():
+                block_num = row['block']
+                actual = row['accuracy']
+                fitted = example_slopes['a'] + example_slopes['b'] * np.log(block_num)
+                print(f"  {int(block_num)}   |  {actual:6.2f}  | {fitted:6.2f}")
+
+        if mismatches:
+            print("\n" + "=" * 60)
+            print("⚠ VALIDATION WARNING")
+            print("=" * 60)
+            print(f"\nFound {len(mismatches)} group(s) with learning rate mismatch:")
+            for mm in mismatches:
+                print(f"  {mm['group']}: provided={mm['provided']:.3f}, "
+                     f"computed={mm['computed']:.3f}, diff={mm['diff']:.3f}")
+            print(f"\nTolerance: {tolerance}")
+            print("\nPossible reasons:")
+            print("  1. Different fitting method (OLS vs. curve_fit)")
+            print("  2. Subject ID assignment differences")
+            print("  3. Different preprocessing or filtering")
+        else:
+            print("\n" + "=" * 60)
+            print("✓ VALIDATION PASSED")
+            print("=" * 60)
+            print(f"All groups match within tolerance ({tolerance})")
+    else:
+        print("\nNo groupLR_forLMM.csv found in data directory.")
+        print("Skipping validation. Proceeding with computed learning rates only.")
+
     return block_acc, slopes
+
+
+def load_provided_learning_rates(data_dir: str) -> pd.DataFrame | None:
+    """
+    Load provided learning rates from groupLR_forLMM.csv.
+
+    Returns DataFrame with columns: [cond, b] where b is the learning rate
+    Returns None if file doesn't exist.
+    """
+    import os
+
+    lr_path = os.path.join(data_dir, "groupLR_forLMM.csv")
+    if not os.path.exists(lr_path):
+        return None
+
+    df_lr = pd.read_csv(lr_path)
+
+    # Map phase/match to condition codes
+    # phase=1, match=1 -> P-match
+    # phase=2, match=1 -> T-match
+    # phase=2, match=2 -> T-nonmatch
+
+    rows = []
+    for _, row in df_lr.iterrows():
+        phase = int(row['phase'])
+        match = int(row['match'])
+        lr = float(row['LR'])
+        subid = int(row['subID'])
+
+        if phase == 1 and match == 1:
+            cond = "P"
+            pid = f"orig_P_{((subid-1) % 20) + 1:02d}"
+        elif phase == 2 and match == 1:
+            cond = "T"
+            pid = f"orig_T_{((subid-21) % 20) + 1:02d}"
+        elif phase == 2 and match == 2:
+            cond = "TN"
+            pid = f"orig_TN_{((subid-41) % 20) + 1:02d}"
+        else:
+            continue
+
+        rows.append({
+            "participant_id": pid,
+            "cond": cond,
+            "b": lr,
+        })
+
+    return pd.DataFrame(rows)
 
 
 def visualize_lr_strip_plot(
@@ -1061,15 +1294,31 @@ def visualize_lr_strip_plot(
         rep_p_slopes: Replication P-match slopes (day 1)
         rep_t_slopes: Replication T-match slopes (day 1)
     """
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # Merge all original conditions
+    all_orig_values = np.concatenate([
+        orig_p_slopes["b"].values,
+        orig_t_slopes["b"].values,
+        orig_tn_slopes["b"].values,
+        orig_c_slopes["b"].values
+    ])
+
+    # Merge all replication conditions
+    all_rep_values = np.concatenate([
+        rep_p_slopes["b"].values,
+        rep_t_slopes["b"].values
+    ])
+
+    fig, ax = plt.subplots(figsize=(10, 8))
 
     groups_info = [
         ("T-match (original)", orig_t_slopes["b"].values, "#1f5f8a"),
         ("P-match (original)", orig_p_slopes["b"].values, "#2d8a2d"),
         ("T-nonmatch (original)", orig_tn_slopes["b"].values, "#9370DB"),
         ("Arrhythmic Control (original)", orig_c_slopes["b"].values, "#666666"),
+        ("All conditions (original)", all_orig_values, "#333333"),
         ("T-match (replication)", rep_t_slopes["b"].values, "#5fa3d6"),
         ("P-match (replication)", rep_p_slopes["b"].values, "#5fc85f"),
+        ("All conditions (replication)", all_rep_values, "#555555"),
     ]
 
     dot_size = 40  # Size of each dot (matplotlib scatter 's' parameter)
@@ -1083,9 +1332,10 @@ def visualize_lr_strip_plot(
     for group_idx, (label, values, color) in enumerate(groups_info):
         y_baseline = group_idx  # Baseline y-position for this group
 
-        # Greedy layering: place each dot in the lowest layer where it fits
+        # Greedy layering: sort values first, then place each dot in the lowest layer where it fits
+        # Processing in sorted order (left to right) creates a tidier layout
         sorted_indices = np.argsort(values)
-        layers = {}  # layer_num -> list of x positions already placed in that layer
+        layers = {}  # layer_num -> sorted list of x positions already placed in that layer
         dot_layers = {}  # index -> layer assignment
 
         for idx in sorted_indices:
@@ -1104,7 +1354,9 @@ def visualize_lr_strip_plot(
                         break
 
                 if fits:
-                    layers[layer].append(val)
+                    # Insert in sorted order for tidier bookkeeping
+                    import bisect
+                    bisect.insort(layers[layer], val)
                     dot_layers[idx] = layer
                     break
                 else:
@@ -1297,8 +1549,11 @@ def visualize_original_aggregate(
     show_side_by_side: bool = True,
     replication_data: tuple[pd.DataFrame, pd.DataFrame] | None = None,
     control_data: tuple[pd.DataFrame, pd.DataFrame] | None = None,
+    tn_data: tuple[pd.DataFrame, pd.DataFrame] | None = None,
     show_control: bool = False,
     show_filtered: bool = True,
+    y_lim: tuple[float, float] | None = None,
+    figsize: tuple[float, float] | None = None,
 ) -> plt.Figure:
     """
     Visualize aggregate learning curves for P-match vs T-match from original paper data.
@@ -1316,15 +1571,17 @@ def visualize_original_aggregate(
     colors = {
         "P": "#2d8a2d",  # Green for P-match
         "T": "#1f5f8a",  # Blue for T-match
+        "TN": "#9370DB",  # Purple for T-nonMatch
         "C": "#666666",  # Grey for Control
     }
     labels = {
         "P": "P-match",
         "T": "T-match",
+        "TN": "T-nonMatch",
         "C": "Arrhythmic Control",
     }
 
-    def plot_aggregate(ax, block_acc_data, slopes_data, title, y_lim=None, control_data_inner=None):
+    def plot_aggregate(ax, block_acc_data, slopes_data, title, y_lim=None, control_data_inner=None, tn_data_inner=None):
         """Helper to plot one aggregate view"""
         endpoints = {}
 
@@ -1347,6 +1604,27 @@ def visualize_original_aggregate(
 
             endpoints[cond] = (x_fit[-1], y_fit[-1], fit.b)
 
+        # Add T-nonMatch if provided
+        if tn_data_inner is not None:
+            tn_block_acc, tn_slopes = tn_data_inner
+            tn_acc = tn_block_acc[tn_block_acc["cond"] == "TN"]
+            grp_means = tn_acc.groupby("block")["accuracy"].mean().reset_index()
+            blocks = grp_means["block"].values
+            acc = grp_means["accuracy"].values
+
+            color = colors["TN"]
+
+            # Plot dots
+            ax.scatter(blocks, acc, c=color, s=30, zorder=3)
+
+            # Fit and plot curve
+            fit = fit_learning_rate(blocks, acc, method="ols")
+            x_fit = np.linspace(1, 8, 100)
+            y_fit = log_linear(x_fit, fit.a, fit.b)
+            ax.plot(x_fit, y_fit, color=color, linewidth=1.5, zorder=2)
+
+            endpoints["TN"] = (x_fit[-1], y_fit[-1], fit.b)
+
         # Add control if provided
         if control_data_inner is not None:
             ctrl_block_acc, ctrl_slopes = control_data_inner
@@ -1368,13 +1646,17 @@ def visualize_original_aggregate(
 
             endpoints["C"] = (x_fit[-1], y_fit[-1], fit.b)
 
-        # Direct labeling: T-match on top, P-match on bottom, Control in middle
+        # Direct labeling: T-match on top, TN below T, P-match on bottom, Control in middle
         for cond, (x, y, lr) in endpoints.items():
             color = colors[cond]
             if cond == "T":
                 # T-match: position above the curve
                 y_offset = 2.0
                 va = "bottom"
+            elif cond == "TN":
+                # T-nonMatch: position between T and P
+                y_offset = 0.5
+                va = "center"
             elif cond == "C":
                 # Control: position in middle/right side
                 y_offset = 0.0
@@ -1445,11 +1727,12 @@ def visualize_original_aggregate(
         y_padding = (y_max - y_min) * 0.1
         y_lim = (y_min - y_padding, y_max + y_padding)
 
-        # Decide whether to show control
+        # Decide whether to show control and TN
         ctrl_data_to_show = control_data if show_control else None
+        tn_data_to_show = tn_data  # Always pass if provided
 
         # Left: All data from original paper
-        plot_aggregate(axes[ax_idx], block_acc, slopes, "Original: All participants", y_lim=y_lim, control_data_inner=ctrl_data_to_show)
+        plot_aggregate(axes[ax_idx], block_acc, slopes, "Original: All participants", y_lim=y_lim, control_data_inner=ctrl_data_to_show, tn_data_inner=tn_data_to_show)
         ax_idx += 1
 
         # Middle: Filtered data from original paper (optional)
@@ -1459,16 +1742,16 @@ def visualize_original_aggregate(
             slopes_filtered = slopes[slopes["participant_id"].isin(valid_pids)]
             n_excluded = len(slopes["participant_id"].unique()) - len(valid_pids)
             plot_aggregate(axes[ax_idx], block_acc_filtered, slopes_filtered,
-                          f"Original: Filtered (LR ≥ {min_lr_1st_day}, n={n_excluded} excluded)", y_lim=y_lim, control_data_inner=ctrl_data_to_show)
+                          f"Original: Filtered (LR ≥ {min_lr_1st_day}, n={n_excluded} excluded)", y_lim=y_lim, control_data_inner=ctrl_data_to_show, tn_data_inner=tn_data_to_show)
             ax_idx += 1
 
-        # Right: Replication day 1 (if provided) - no control line here
+        # Right: Replication day 1 (if provided) - no control or TN lines here
         if replication_data is not None:
             rep_block_acc, rep_slopes = replication_data
             # Filter to day 1 only
             rep_day1_acc = rep_block_acc[rep_block_acc["day_index"] == 1].copy()
             rep_day1_slopes = rep_slopes[rep_slopes["day_index"] == 1].copy()
-            plot_aggregate(axes[ax_idx], rep_day1_acc, rep_day1_slopes, "Replication: Day 1", y_lim=y_lim, control_data_inner=None)
+            plot_aggregate(axes[ax_idx], rep_day1_acc, rep_day1_slopes, "Replication: Day 1", y_lim=y_lim, control_data_inner=None, tn_data_inner=None)
             ax_idx += 1
 
 
@@ -1476,7 +1759,8 @@ def visualize_original_aggregate(
         fig.tight_layout(rect=(0, 0, 1, 1))
     else:
         # Original single-panel behavior
-        fig, ax = plt.subplots(figsize=(8, 5))
+        fig_size = figsize if figsize is not None else (8, 5)
+        fig, ax = plt.subplots(figsize=fig_size)
 
         # Filter participants by minimum LR if specified
         if min_lr_1st_day is not None:
@@ -1488,7 +1772,8 @@ def visualize_original_aggregate(
             title_suffix = ""
 
         ctrl_data_to_show = control_data if show_control else None
-        plot_aggregate(ax, block_acc, slopes, f"Original Paper Data: P-match vs T-match{title_suffix}", control_data_inner=ctrl_data_to_show)
+        tn_data_to_show = tn_data  # Always pass if provided
+        plot_aggregate(ax, block_acc, slopes, f"Original Paper Data: P-match vs T-match{title_suffix}", y_lim=y_lim, control_data_inner=ctrl_data_to_show, tn_data_inner=tn_data_to_show)
         fig.tight_layout()
 
     return fig
@@ -1638,8 +1923,22 @@ def main():
         control_block_acc = tc_block_acc[tc_block_acc["cond"] == "C"]
         control_slopes = tc_slopes[tc_slopes["cond"] == "C"]
 
+        # Load T-nonMatch (needed for specific aggregate chart)
+        print("\nLoading T-nonMatch...")
+        tn_block_acc, tn_slopes = load_original_paper_data(args.original_data_dir, groups={3: "TN"})
+        print(f"Loaded {len(tn_slopes)} participants (T-nonMatch)")
+
         # Visualize P-match vs T-match individual curves
         visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=20, cols_per_group=3)
+
+        # Show original data only with paper's y-axis range (0.55-0.7)
+        print("\nGenerating aggregate chart for original data only (y-axis: 55-70%)...")
+        visualize_original_aggregate(orig_block_acc, orig_slopes,
+                                     show_side_by_side=False, replication_data=None,
+                                     control_data=(control_block_acc, control_slopes),
+                                     tn_data=(tn_block_acc, tn_slopes),
+                                     show_control=False, show_filtered=False,
+                                     y_lim=(55, 70), figsize=(6, 6))
 
         # Show comparison with replication data (2 columns: original all + replication)
         visualize_original_aggregate(orig_block_acc, orig_slopes, min_lr_1st_day=-1,
@@ -1673,11 +1972,22 @@ def main():
         tn_block_acc, tn_slopes = load_original_paper_data(args.original_data_dir, groups={3: "TN"})
         print(f"Loaded {len(tn_slopes)} participants (T-nonmatch)")
 
-        # Prepare data for strip plot
-        p_slopes_only = orig_slopes[orig_slopes["cond"] == "P"]
-        t_slopes_only = tc_slopes[tc_slopes["cond"] == "T"]
+        # Prepare data for strip plot - use PROVIDED learning rates for original data
+        print("\nLoading provided learning rates from groupLR_forLMM.csv...")
+        provided_slopes = load_provided_learning_rates(args.original_data_dir)
+
+        if provided_slopes is None:
+            raise FileNotFoundError(
+                f"groupLR_forLMM.csv not found in {args.original_data_dir}. "
+                "This file is required for the strip plot to use the paper's official learning rates."
+            )
+
+        print("Using provided learning rates for original data (from groupLR_forLMM.csv)")
+        p_slopes_only = provided_slopes[provided_slopes["cond"] == "P"]
+        t_slopes_only = provided_slopes[provided_slopes["cond"] == "T"]
+        tn_slopes_only = provided_slopes[provided_slopes["cond"] == "TN"]
+        # Control not in groupLR_forLMM.csv, use computed
         c_slopes_only = tc_slopes[tc_slopes["cond"] == "C"]
-        tn_slopes_only = tn_slopes[tn_slopes["cond"] == "TN"]
 
         # Strip plot of individual learning rates by group
         print("\nGenerating learning rate strip plot...")
