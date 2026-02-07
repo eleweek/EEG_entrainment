@@ -1050,7 +1050,8 @@ def visualize_lr_strip_plot(
     rep_t_slopes: pd.DataFrame,
 ) -> plt.Figure:
     """
-    Strip plot showing individual learning rates for each group.
+    Dot plot showing individual learning rates for each group.
+    Dots are binned and stacked vertically to create a histogram-like appearance.
 
     Args:
         orig_p_slopes: Original P-match slopes
@@ -1060,12 +1061,8 @@ def visualize_lr_strip_plot(
         rep_p_slopes: Replication P-match slopes (day 1)
         rep_t_slopes: Replication T-match slopes (day 1)
     """
-    import seaborn as sns
-
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    # Prepare data in long format for seaborn
-    data_list = []
     groups_info = [
         ("T-match (original)", orig_t_slopes["b"].values, "#1f5f8a"),
         ("P-match (original)", orig_p_slopes["b"].values, "#2d8a2d"),
@@ -1075,26 +1072,55 @@ def visualize_lr_strip_plot(
         ("P-match (replication)", rep_p_slopes["b"].values, "#5fc85f"),
     ]
 
-    for label, values, color in groups_info:
-        for val in values:
-            data_list.append({"Group": label, "Learning Rate": val, "Color": color})
+    dot_size = 40  # Size of each dot (matplotlib scatter 's' parameter)
+    dot_spacing = 0.10  # Vertical spacing between layers
+    # Calculate overlap threshold based on dot radius
+    # For scatter plot, s is area in points^2, so radius ≈ sqrt(s)
+    # In data coordinates, diameter is approximately sqrt(dot_size) / 50
+    dot_radius_data = np.sqrt(dot_size) / 50  # Approximate conversion to data units
+    overlap_threshold = 2 * dot_radius_data  # Two dots touch when centers are 2*radius apart
 
-    plot_data = pd.DataFrame(data_list)
+    for group_idx, (label, values, color) in enumerate(groups_info):
+        y_baseline = group_idx  # Baseline y-position for this group
 
-    # Create color palette
-    palette = {label: color for label, _, color in groups_info}
+        # Greedy layering: place each dot in the lowest layer where it fits
+        sorted_indices = np.argsort(values)
+        layers = {}  # layer_num -> list of x positions already placed in that layer
+        dot_layers = {}  # index -> layer assignment
 
-    # Plot with swarmplot (stacks overlapping points naturally)
-    sns.swarmplot(data=plot_data, x="Learning Rate", y="Group",
-                  palette=palette, size=5, alpha=0.6,
-                  edgecolor='white', linewidth=0.5, ax=ax,
-                  order=[g[0] for g in groups_info])
+        for idx in sorted_indices:
+            val = values[idx]
+            # Try each layer starting from 0
+            layer = 0
+            while True:
+                if layer not in layers:
+                    layers[layer] = []
 
-    # Add mean lines
-    for i, (label, values, color) in enumerate(groups_info):
+                # Check if this value fits in current layer (no overlap)
+                fits = True
+                for existing_x in layers[layer]:
+                    if abs(val - existing_x) < overlap_threshold:
+                        fits = False
+                        break
+
+                if fits:
+                    layers[layer].append(val)
+                    dot_layers[idx] = layer
+                    break
+                else:
+                    layer += 1
+
+        # Plot all dots at their exact positions with assigned layers
+        for idx, val in enumerate(values):
+            layer = dot_layers[idx]
+            y_pos = y_baseline + layer * dot_spacing
+            ax.scatter(val, y_pos, s=dot_size, color=color, alpha=0.7,
+                      edgecolors='white', linewidth=0.5, zorder=5)
+
+        # Add mean line
         mean = np.mean(values)
-        y_pos = i
-        ax.vlines(mean, y_pos - 0.2, y_pos + 0.2, color=color, linewidth=2, zorder=10)
+        ax.vlines(mean, y_baseline - 0.15, y_baseline + 0.15,
+                 color=color, linewidth=2, zorder=10)
 
     # Add vertical line at zero
     ax.axvline(x=0, color='black', linestyle='--', linewidth=0.5, alpha=0.5, zorder=0)
@@ -1106,6 +1132,11 @@ def visualize_lr_strip_plot(
     ax.spines["bottom"].set_linewidth(0.5)
     ax.spines["left"].set_color("black")
     ax.spines["bottom"].set_color("black")
+
+    # Set y-axis labels and limits
+    ax.set_yticks(range(len(groups_info)))
+    ax.set_yticklabels([g[0] for g in groups_info], fontsize=9)
+    ax.set_ylim(-0.5, len(groups_info) - 0.5)
 
     ax.tick_params(axis="both", colors="black", length=3, width=0.5)
     ax.set_xlabel("Learning Rate", fontsize=10, color="black")
