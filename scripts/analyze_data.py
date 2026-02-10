@@ -1302,23 +1302,16 @@ def visualize_lr_strip_plot(
         orig_c_slopes["b"].values
     ])
 
-    # Merge all replication conditions
-    all_rep_values = np.concatenate([
-        rep_p_slopes["b"].values,
-        rep_t_slopes["b"].values
-    ])
-
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(10, 7))
 
     groups_info = [
-        ("T-match (original)", orig_t_slopes["b"].values, "#1f5f8a"),
-        ("P-match (original)", orig_p_slopes["b"].values, "#2d8a2d"),
-        ("T-nonmatch (original)", orig_tn_slopes["b"].values, "#9370DB"),
-        ("Arrhythmic Control (original)", orig_c_slopes["b"].values, "#666666"),
         ("All conditions (original)", all_orig_values, "#333333"),
-        ("T-match (replication)", rep_t_slopes["b"].values, "#5fa3d6"),
+        ("Arrhythmic Control (original)", orig_c_slopes["b"].values, "#666666"),
+        ("T-nonmatch (original)", orig_tn_slopes["b"].values, "#9370DB"),
+        ("P-match (original)", orig_p_slopes["b"].values, "#2d8a2d"),
+        ("T-match (original)", orig_t_slopes["b"].values, "#1f5f8a"),
         ("P-match (replication)", rep_p_slopes["b"].values, "#5fc85f"),
-        ("All conditions (replication)", all_rep_values, "#555555"),
+        ("T-match (replication)", rep_t_slopes["b"].values, "#5fa3d6"),
     ]
 
     dot_size = 40  # Size of each dot (matplotlib scatter 's' parameter)
@@ -1329,8 +1322,20 @@ def visualize_lr_strip_plot(
     dot_radius_data = np.sqrt(dot_size) / 50  # Approximate conversion to data units
     overlap_threshold = 2 * dot_radius_data  # Two dots touch when centers are 2*radius apart
 
+    # Compute y positions: tighter spacing, with extra gap before the last strip
+    strip_spacing = 0.7
+    last_gap = 1.2
+    y_positions = []
+    for i in range(len(groups_info)):
+        if i == 0:
+            y_positions.append(0)
+        elif i == 1:
+            y_positions.append(y_positions[-1] + last_gap)
+        else:
+            y_positions.append(y_positions[-1] + strip_spacing)
+
     for group_idx, (label, values, color) in enumerate(groups_info):
-        y_baseline = group_idx  # Baseline y-position for this group
+        y_baseline = y_positions[group_idx]
 
         # Greedy layering: sort values first, then place each dot in the lowest layer where it fits
         # Processing in sorted order (left to right) creates a tidier layout
@@ -1369,10 +1374,16 @@ def visualize_lr_strip_plot(
             ax.scatter(val, y_pos, s=dot_size, color=color, alpha=0.7,
                       edgecolors='white', linewidth=0.5, zorder=5)
 
-        # Add mean line
+        # Add mean line starting from baseline
         mean = np.mean(values)
-        ax.vlines(mean, y_baseline - 0.15, y_baseline + 0.15,
-                 color=color, linewidth=2, zorder=10)
+        max_layer = max(dot_layers.values()) if dot_layers else 0
+        ax.vlines(mean, y_baseline - 0.05, y_baseline + max_layer * dot_spacing + 0.15,
+                 color=color, linewidth=1, zorder=10)
+        is_first = (group_idx == 0)
+        is_last = (group_idx == len(groups_info) - 1)
+        mean_label = f"mean={mean:.2f}" if is_first or is_last else f"{mean:.2f}"
+        ax.text(mean, y_baseline - 0.15, mean_label,
+                color=color, fontsize=9, ha="center", va="top", zorder=10)
 
     # Add vertical line at zero
     ax.axvline(x=0, color='black', linestyle='--', linewidth=0.5, alpha=0.5, zorder=0)
@@ -1386,9 +1397,9 @@ def visualize_lr_strip_plot(
     ax.spines["bottom"].set_color("black")
 
     # Set y-axis labels and limits
-    ax.set_yticks(range(len(groups_info)))
+    ax.set_yticks(y_positions)
     ax.set_yticklabels([g[0] for g in groups_info], fontsize=9)
-    ax.set_ylim(-0.5, len(groups_info) - 0.5)
+    ax.set_ylim(-0.5, y_positions[-1] + 0.5)
 
     ax.tick_params(axis="both", colors="black", length=3, width=0.5)
     ax.set_xlabel("Learning Rate", fontsize=10, color="black")

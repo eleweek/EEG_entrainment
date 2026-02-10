@@ -15,7 +15,7 @@ with tempfile.TemporaryDirectory() as tempdir:
     temp_file_name = f'{tempdir}/temp.fif'
     raw.save(temp_file_name, overwrite=True)
 
-    player = PlayerLSL(temp_file_name)
+    player = PlayerLSL(temp_file_name, chunk_size=2)
     player.start()
 
     sfreq = player.info["sfreq"]
