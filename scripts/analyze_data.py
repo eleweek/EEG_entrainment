@@ -1304,14 +1304,15 @@ def visualize_lr_strip_plot(
 
     fig, ax = plt.subplots(figsize=(10, 7))
 
+    # section=0 -> Original, section=1 -> Replication
     groups_info = [
-        ("All conditions (original)", all_orig_values, "#333333"),
-        ("Arrhythmic Control (original)", orig_c_slopes["b"].values, "#666666"),
-        ("T-nonmatch (original)", orig_tn_slopes["b"].values, "#9370DB"),
-        ("P-match (original)", orig_p_slopes["b"].values, "#2d8a2d"),
-        ("T-match (original)", orig_t_slopes["b"].values, "#1f5f8a"),
-        ("P-match (replication)", rep_p_slopes["b"].values, "#5fc85f"),
-        ("T-match (replication)", rep_t_slopes["b"].values, "#5fa3d6"),
+        ("Original pooled", all_orig_values, "#333333", 0),
+        ("Arrhythmic Control", orig_c_slopes["b"].values, "#666666", 0),
+        ("T-nonmatch", orig_tn_slopes["b"].values, "#9370DB", 0),
+        ("P-match", orig_p_slopes["b"].values, "#2d8a2d", 0),
+        ("T-match", orig_t_slopes["b"].values, "#1f5f8a", 0),
+        ("P-match", rep_p_slopes["b"].values, "#2d8a2d", 1),
+        ("T-match", rep_t_slopes["b"].values, "#1f5f8a", 1),
     ]
 
     dot_size = 40  # Size of each dot (matplotlib scatter 's' parameter)
@@ -1322,19 +1323,23 @@ def visualize_lr_strip_plot(
     dot_radius_data = np.sqrt(dot_size) / 50  # Approximate conversion to data units
     overlap_threshold = 2 * dot_radius_data  # Two dots touch when centers are 2*radius apart
 
-    # Compute y positions: tighter spacing, with extra gap before the last strip
+    # Compute y positions: tighter spacing, with extra gaps between sections
     strip_spacing = 0.7
-    last_gap = 1.2
+    section_gap = 1.2  # gap between "All conditions" and the rest of Original
+    section_break = 1.4  # gap between Original and Replication sections
     y_positions = []
     for i in range(len(groups_info)):
         if i == 0:
             y_positions.append(0)
         elif i == 1:
-            y_positions.append(y_positions[-1] + last_gap)
+            y_positions.append(y_positions[-1] + section_gap)
+        elif groups_info[i][3] != groups_info[i - 1][3]:
+            # Section change (Original -> Replication)
+            y_positions.append(y_positions[-1] + section_break)
         else:
             y_positions.append(y_positions[-1] + strip_spacing)
 
-    for group_idx, (label, values, color) in enumerate(groups_info):
+    for group_idx, (label, values, color, section) in enumerate(groups_info):
         y_baseline = y_positions[group_idx]
 
         # Greedy layering: sort values first, then place each dot in the lowest layer where it fits
@@ -1376,9 +1381,13 @@ def visualize_lr_strip_plot(
 
         # Add mean line starting from baseline
         mean = np.mean(values)
+        median = np.median(values)
         max_layer = max(dot_layers.values()) if dot_layers else 0
-        ax.vlines(mean, y_baseline - 0.05, y_baseline + max_layer * dot_spacing + 0.15,
+        line_top = y_baseline + max_layer * dot_spacing + 0.15
+        ax.vlines(mean, y_baseline - 0.05, line_top,
                  color=color, linewidth=1, zorder=10)
+        ax.vlines(median, y_baseline - 0.05, line_top,
+                 color=color, linewidth=1, linestyle='--', zorder=10)
         is_first = (group_idx == 0)
         is_last = (group_idx == len(groups_info) - 1)
         mean_label = f"mean={mean:.2f}" if is_first or is_last else f"{mean:.2f}"
@@ -1399,15 +1408,27 @@ def visualize_lr_strip_plot(
     # Set y-axis labels and limits
     ax.set_yticks(y_positions)
     ax.set_yticklabels([g[0] for g in groups_info], fontsize=9)
-    ax.set_ylim(-0.5, y_positions[-1] + 0.5)
+    ax.set_ylim(-0.5, y_positions[-1] + 0.8)
+
+    # Add section subheadings to the left of y-axis, right-aligned with tick labels
+    orig_indices = [i for i, g in enumerate(groups_info) if g[3] == 0]
+    rep_indices = [i for i, g in enumerate(groups_info) if g[3] == 1]
+
+    # Use axes transform for x (aligned with tick labels) and data transform for y
+    from matplotlib.transforms import blended_transform_factory
+    trans = blended_transform_factory(ax.transAxes, ax.transData)
+    tick_x = -0.01  # just left of the tick labels
+    ax.text(tick_x, y_positions[orig_indices[-1]] + 0.4, "Original Study",
+            transform=trans, fontsize=11, fontweight="bold", ha="right", va="bottom", color="black")
+    ax.text(tick_x, y_positions[rep_indices[-1]] + 0.4, "Replication, Day 1",
+            transform=trans, fontsize=11, fontweight="bold", ha="right", va="bottom", color="black")
 
     ax.tick_params(axis="both", colors="black", length=3, width=0.5)
-    ax.set_xlabel("Learning Rate", fontsize=10, color="black")
+    ax.set_xlabel("Learning Rates by Group", fontsize=11, fontweight="bold", color="black", labelpad=10)
     ax.set_ylabel("")
-    ax.set_title("Learning Rates by Group", fontsize=11, color="black")
 
     fig.tight_layout()
-    fig.savefig("learning rates by group.png", dpi=150, bbox_inches="tight")
+    fig.savefig("strip_plot.png", dpi=300, bbox_inches="tight")
     return fig
 
 
