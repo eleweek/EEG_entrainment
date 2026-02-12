@@ -1226,32 +1226,33 @@ def load_original_paper_data(
     return block_acc, slopes
 
 
-def load_provided_learning_rates(data_dir: str) -> pd.DataFrame | None:
+def load_provided_learning_rates(data_dir: str, filename: str = "groupLR_forLMM.csv") -> pd.DataFrame | None:
     """
-    Load provided learning rates from groupLR_forLMM.csv.
+    Load provided learning rates from a CSV file.
 
-    Returns DataFrame with columns: [cond, b] where b is the learning rate
+    Returns DataFrame with columns: [participant_id, cond, b] where b is the learning rate.
     Returns None if file doesn't exist.
     """
     import os
 
-    lr_path = os.path.join(data_dir, "groupLR_forLMM.csv")
+    lr_path = os.path.join(data_dir, filename)
     if not os.path.exists(lr_path):
         return None
 
     df_lr = pd.read_csv(lr_path)
+    df_lr.columns = df_lr.columns.str.strip().str.lower()  # normalise
 
     # Map phase/match to condition codes
     # phase=1, match=1 -> P-match
     # phase=2, match=1 -> T-match
-    # phase=2, match=2 -> T-nonmatch
+    # phase=2, match=2 -> T-nonMatch
 
     rows = []
     for _, row in df_lr.iterrows():
         phase = int(row['phase'])
         match = int(row['match'])
-        lr = float(row['LR'])
-        subid = int(row['subID'])
+        lr = float(row['lr'])
+        subid = int(row['subid'])
 
         if phase == 1 and match == 1:
             cond = "P"
@@ -1274,6 +1275,119 @@ def load_provided_learning_rates(data_dir: str) -> pd.DataFrame | None:
     return pd.DataFrame(rows)
 
 
+def _render_strip_plot(
+    ax: plt.Axes,
+    groups_info: list[tuple[str, np.ndarray, str, int]],
+    section_labels: dict[int, str] | None = None,
+    x_label: str = "Learning Rate",
+    first_gap: float | None = None,
+):
+    """
+    Core strip plot renderer. Draws greedy-layered dot strips on the given axes.
+
+    Args:
+        ax: Matplotlib axes to draw on.
+        groups_info: List of (label, values, color, section_id).
+        section_labels: Optional dict mapping section_id to bold heading text.
+        x_label: X-axis label.
+        first_gap: Gap between strip 0 and strip 1 when same section. Default: same as section_break.
+    """
+    import bisect
+
+    dot_size = 40
+    dot_spacing = 0.10
+    dot_radius_data = np.sqrt(dot_size) / 50
+    overlap_threshold = 2 * dot_radius_data
+
+    # Compute y positions with section gaps
+    strip_spacing = 0.7
+    section_break = 1.4
+    if first_gap is None:
+        first_gap = section_break
+    y_positions = []
+    for i in range(len(groups_info)):
+        if i == 0:
+            y_positions.append(0)
+        elif i == 1 and groups_info[i][3] == groups_info[i - 1][3]:
+            y_positions.append(y_positions[-1] + first_gap)
+        elif groups_info[i][3] != groups_info[i - 1][3]:
+            y_positions.append(y_positions[-1] + section_break)
+        else:
+            y_positions.append(y_positions[-1] + strip_spacing)
+
+    for group_idx, (label, values, color, section) in enumerate(groups_info):
+        y_baseline = y_positions[group_idx]
+
+        sorted_indices = np.argsort(values)
+        layers = {}
+        dot_layers = {}
+
+        for idx in sorted_indices:
+            val = values[idx]
+            layer = 0
+            while True:
+                if layer not in layers:
+                    layers[layer] = []
+                fits = True
+                for existing_x in layers[layer]:
+                    if abs(val - existing_x) < overlap_threshold:
+                        fits = False
+                        break
+                if fits:
+                    bisect.insort(layers[layer], val)
+                    dot_layers[idx] = layer
+                    break
+                else:
+                    layer += 1
+
+        for idx, val in enumerate(values):
+            layer = dot_layers[idx]
+            y_pos = y_baseline + layer * dot_spacing
+            ax.scatter(val, y_pos, s=dot_size, color=color, alpha=0.7,
+                      edgecolors='white', linewidth=0.5, zorder=5)
+
+        mean = np.mean(values)
+        max_layer = max(dot_layers.values()) if dot_layers else 0
+        line_top = y_baseline + max_layer * dot_spacing + 0.15
+        ax.vlines(mean, y_baseline - 0.05, line_top,
+                 color=color, linewidth=1, zorder=10)
+        is_first = (group_idx == 0)
+        is_last = (group_idx == len(groups_info) - 1)
+        mean_label = f"mean={mean:.2f}" if is_first or is_last else f"{mean:.2f}"
+        ax.text(mean, y_baseline - 0.15, mean_label,
+                color=color, fontsize=9, ha="center", va="top", zorder=10)
+
+    ax.axvline(x=0, color='black', linestyle='--', linewidth=0.5, alpha=0.5, zorder=0)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["left"].set_linewidth(0.5)
+    ax.spines["bottom"].set_linewidth(0.5)
+    ax.spines["left"].set_color("black")
+    ax.spines["bottom"].set_color("black")
+
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels([g[0] for g in groups_info], fontsize=9)
+    ax.set_ylim(-0.5, y_positions[-1] + 0.8)
+
+    if section_labels:
+        from matplotlib.transforms import blended_transform_factory
+        trans = blended_transform_factory(ax.transAxes, ax.transData)
+        tick_x = -0.01
+        for sec_id, sec_label in section_labels.items():
+            sec_indices = [i for i, g in enumerate(groups_info) if g[3] == sec_id]
+            if sec_indices:
+                ax.text(tick_x, y_positions[sec_indices[-1]] + 0.4, sec_label,
+                        transform=trans, fontsize=11, fontweight="bold",
+                        ha="right", va="bottom", color="black")
+
+    ax.tick_params(axis="both", colors="black", length=3, width=0.5)
+    ax.set_xlabel(x_label, fontsize=11, fontweight="bold", color="black", labelpad=10)
+    ax.set_ylabel("")
+
+    return y_positions
+
+
 def visualize_lr_strip_plot(
     orig_p_slopes: pd.DataFrame,
     orig_t_slopes: pd.DataFrame,
@@ -1282,153 +1396,203 @@ def visualize_lr_strip_plot(
     rep_p_slopes: pd.DataFrame,
     rep_t_slopes: pd.DataFrame,
 ) -> plt.Figure:
-    """
-    Dot plot showing individual learning rates for each group.
-    Dots are binned and stacked vertically to create a histogram-like appearance.
-
-    Args:
-        orig_p_slopes: Original P-match slopes
-        orig_t_slopes: Original T-match slopes
-        orig_tn_slopes: Original T-nonmatch slopes
-        orig_c_slopes: Original Control slopes
-        rep_p_slopes: Replication P-match slopes (day 1)
-        rep_t_slopes: Replication T-match slopes (day 1)
-    """
-    # Merge all original conditions
+    """Dot plot showing individual learning rates for each group."""
     all_orig_values = np.concatenate([
-        orig_p_slopes["b"].values,
-        orig_t_slopes["b"].values,
-        orig_tn_slopes["b"].values,
-        orig_c_slopes["b"].values
+        orig_p_slopes["b"].values, orig_t_slopes["b"].values,
+        orig_tn_slopes["b"].values, orig_c_slopes["b"].values,
     ])
 
     fig, ax = plt.subplots(figsize=(10, 7))
 
-    # section=0 -> Original, section=1 -> Replication
     groups_info = [
         ("Original pooled", all_orig_values, "#333333", 0),
         ("Arrhythmic Control", orig_c_slopes["b"].values, "#666666", 0),
-        ("T-nonmatch", orig_tn_slopes["b"].values, "#9370DB", 0),
+        ("T-nonMatch", orig_tn_slopes["b"].values, "#9370DB", 0),
         ("P-match", orig_p_slopes["b"].values, "#2d8a2d", 0),
         ("T-match", orig_t_slopes["b"].values, "#1f5f8a", 0),
         ("P-match", rep_p_slopes["b"].values, "#2d8a2d", 1),
         ("T-match", rep_t_slopes["b"].values, "#1f5f8a", 1),
     ]
 
-    dot_size = 40  # Size of each dot (matplotlib scatter 's' parameter)
-    dot_spacing = 0.10  # Vertical spacing between layers
-    # Calculate overlap threshold based on dot radius
-    # For scatter plot, s is area in points^2, so radius ≈ sqrt(s)
-    # In data coordinates, diameter is approximately sqrt(dot_size) / 50
-    dot_radius_data = np.sqrt(dot_size) / 50  # Approximate conversion to data units
-    overlap_threshold = 2 * dot_radius_data  # Two dots touch when centers are 2*radius apart
+    _render_strip_plot(ax, groups_info,
+                       section_labels={0: "Original Study", 1: "Replication, Day 1"},
+                       x_label="Learning Rates by Group")
 
-    # Compute y positions: tighter spacing, with extra gaps between sections
-    strip_spacing = 0.7
-    section_gap = 1.2  # gap between "All conditions" and the rest of Original
-    section_break = 1.4  # gap between Original and Replication sections
-    y_positions = []
-    for i in range(len(groups_info)):
-        if i == 0:
-            y_positions.append(0)
-        elif i == 1:
-            y_positions.append(y_positions[-1] + section_gap)
-        elif groups_info[i][3] != groups_info[i - 1][3]:
-            # Section change (Original -> Replication)
-            y_positions.append(y_positions[-1] + section_break)
-        else:
-            y_positions.append(y_positions[-1] + strip_spacing)
+    fig.tight_layout()
+    fig.savefig("strip_plot.png", dpi=300, bbox_inches="tight")
+    return fig
 
-    for group_idx, (label, values, color, section) in enumerate(groups_info):
-        y_baseline = y_positions[group_idx]
 
-        # Greedy layering: sort values first, then place each dot in the lowest layer where it fits
-        # Processing in sorted order (left to right) creates a tidier layout
-        sorted_indices = np.argsort(values)
-        layers = {}  # layer_num -> sorted list of x positions already placed in that layer
-        dot_layers = {}  # index -> layer assignment
+def visualize_validation_strip_plot(
+    provided_slopes: pd.DataFrame,
+    recomputed_slopes: pd.DataFrame,
+    recomputed_tn_slopes: pd.DataFrame,
+) -> plt.Figure:
+    """
+    Strip plot comparing original (provided) vs recomputed learning rates
+    for T-match, P-match, and T-nonMatch.
+    """
+    fig, ax = plt.subplots(figsize=(10, 6))
 
-        for idx in sorted_indices:
-            val = values[idx]
-            # Try each layer starting from 0
-            layer = 0
-            while True:
-                if layer not in layers:
-                    layers[layer] = []
+    groups_info = [
+        ("Provided", provided_slopes[provided_slopes["cond"] == "TN"]["b"].values, "#9370DB", 0),
+        ("Recomputed", recomputed_tn_slopes[recomputed_tn_slopes["cond"] == "TN"]["b"].values, "#c9b1e8", 0),
+        ("Provided", provided_slopes[provided_slopes["cond"] == "P"]["b"].values, "#2d8a2d", 1),
+        ("Recomputed", recomputed_slopes[recomputed_slopes["cond"] == "P"]["b"].values, "#74c476", 1),
+        ("Provided", provided_slopes[provided_slopes["cond"] == "T"]["b"].values, "#1f5f8a", 2),
+        ("Recomputed", recomputed_slopes[recomputed_slopes["cond"] == "T"]["b"].values, "#6baed6", 2),
+    ]
 
-                # Check if this value fits in current layer (no overlap)
-                fits = True
-                for existing_x in layers[layer]:
-                    if abs(val - existing_x) < overlap_threshold:
-                        fits = False
-                        break
+    _render_strip_plot(ax, groups_info,
+                       section_labels={0: "T-nonMatch", 1: "P-match", 2: "T-match"},
+                       x_label="Learning Rate",
+                       first_gap=0.7)
 
-                if fits:
-                    # Insert in sorted order for tidier bookkeeping
-                    import bisect
-                    bisect.insort(layers[layer], val)
-                    dot_layers[idx] = layer
-                    break
-                else:
-                    layer += 1
+    fig.tight_layout()
+    fig.savefig("validation_strip_plot.png", dpi=300, bbox_inches="tight")
+    return fig
 
-        # Plot all dots at their exact positions with assigned layers
-        for idx, val in enumerate(values):
-            layer = dot_layers[idx]
-            y_pos = y_baseline + layer * dot_spacing
-            ax.scatter(val, y_pos, s=dot_size, color=color, alpha=0.7,
-                      edgecolors='white', linewidth=0.5, zorder=5)
 
-        # Add mean line starting from baseline
-        mean = np.mean(values)
-        median = np.median(values)
-        max_layer = max(dot_layers.values()) if dot_layers else 0
-        line_top = y_baseline + max_layer * dot_spacing + 0.15
-        ax.vlines(mean, y_baseline - 0.05, line_top,
-                 color=color, linewidth=1, zorder=10)
-        ax.vlines(median, y_baseline - 0.05, line_top,
-                 color=color, linewidth=1, linestyle='--', zorder=10)
-        is_first = (group_idx == 0)
-        is_last = (group_idx == len(groups_info) - 1)
-        mean_label = f"mean={mean:.2f}" if is_first or is_last else f"{mean:.2f}"
-        ax.text(mean, y_baseline - 0.15, mean_label,
-                color=color, fontsize=9, ha="center", va="top", zorder=10)
+def visualize_leave_one_out(
+    provided_slopes: pd.DataFrame,
+) -> plt.Figure:
+    """
+    Leave-one-out sensitivity plot: for each participant, remove them and
+    recompute Welch's two-tailed p-value for T-match vs P-match.
+    Uses the original provided learning rates (groupLR_forLMM.csv).
+    """
+    t_lr = provided_slopes[provided_slopes["cond"] == "T"]["b"].values
+    p_df = provided_slopes[provided_slopes["cond"] == "P"][["participant_id", "b"]].copy().reset_index(drop=True)
 
-    # Add vertical line at zero
-    ax.axvline(x=0, color='black', linestyle='--', linewidth=0.5, alpha=0.5, zorder=0)
+    baseline_p = stats.ttest_ind(t_lr, p_df["b"].values, equal_var=False).pvalue
 
-    # Tufte-style
+    results = []  # (participant_id, group, lr, p_without)
+
+    # Leave out each T-match participant
+    for i in range(len(t_lr)):
+        t_reduced = np.delete(t_lr, i)
+        p_val = stats.ttest_ind(t_reduced, p_df["b"].values, equal_var=False).pvalue
+        results.append((f"T_{i+1:02d}", "T-match", t_lr[i], p_val))
+
+    # Leave out each P-match participant
+    for i, row in p_df.iterrows():
+        p_reduced = p_df.drop(i)["b"].values
+        p_val = stats.ttest_ind(t_lr, p_reduced, equal_var=False).pvalue
+        results.append((row["participant_id"], "P-match", row["b"], p_val))
+
+    import seaborn as sns
+
+    df = pd.DataFrame(results, columns=["participant_id", "group", "lr", "p_value"])
+    df["group"] = df["group"] + " removed"
+
+    fig, ax = plt.subplots(figsize=(8, 3.5))
+
+    palette = {"T-match removed": "#1f5f8a", "P-match removed": "#2d8a2d"}
+    sns.swarmplot(data=df, x="p_value", y="group", palette=palette, size=4.5,
+                  edgecolor="white", linewidth=0.5, alpha=0.7, ax=ax, orient="h")
+
+    # Significance threshold
+    ax.axvline(x=0.05, color="red", linestyle="--", linewidth=1, alpha=0.7, label="p = 0.05")
+
+    # Baseline p-value
+    ax.axvline(x=baseline_p, color="gray", linestyle=":", linewidth=1, alpha=0.7,
+               label=f"Baseline p = {baseline_p:.4f}")
+
+    ax.set_xlabel("Welch's p-value (two-tailed)", fontsize=10)
+    ax.set_ylabel("")
+    n_flip = sum(1 for r in results if r[3] >= 0.05)
+    ax.set_title(
+        "Leave-one-out sensitivity: T-match vs P-match\n"
+        f"{n_flip}/{len(results)} single removals make p > 0.05",
+        fontsize=12, fontweight="bold"
+    )
+
+    ax.legend(fontsize=8, loc="lower right")
+
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_linewidth(0.5)
     ax.spines["bottom"].set_linewidth(0.5)
-    ax.spines["left"].set_color("black")
-    ax.spines["bottom"].set_color("black")
-
-    # Set y-axis labels and limits
-    ax.set_yticks(y_positions)
-    ax.set_yticklabels([g[0] for g in groups_info], fontsize=9)
-    ax.set_ylim(-0.5, y_positions[-1] + 0.8)
-
-    # Add section subheadings to the left of y-axis, right-aligned with tick labels
-    orig_indices = [i for i, g in enumerate(groups_info) if g[3] == 0]
-    rep_indices = [i for i, g in enumerate(groups_info) if g[3] == 1]
-
-    # Use axes transform for x (aligned with tick labels) and data transform for y
-    from matplotlib.transforms import blended_transform_factory
-    trans = blended_transform_factory(ax.transAxes, ax.transData)
-    tick_x = -0.01  # just left of the tick labels
-    ax.text(tick_x, y_positions[orig_indices[-1]] + 0.4, "Original Study",
-            transform=trans, fontsize=11, fontweight="bold", ha="right", va="bottom", color="black")
-    ax.text(tick_x, y_positions[rep_indices[-1]] + 0.4, "Replication, Day 1",
-            transform=trans, fontsize=11, fontweight="bold", ha="right", va="bottom", color="black")
-
-    ax.tick_params(axis="both", colors="black", length=3, width=0.5)
-    ax.set_xlabel("Learning Rates by Group", fontsize=11, fontweight="bold", color="black", labelpad=10)
-    ax.set_ylabel("")
+    ax.tick_params(axis="both", length=3, width=0.5)
 
     fig.tight_layout()
-    fig.savefig("strip_plot.png", dpi=300, bbox_inches="tight")
+    fig.savefig("leave_one_out.png", dpi=300, bbox_inches="tight")
+    return fig
+
+
+def _spaghetti_grid(
+    grid: list[list[tuple[str, pd.DataFrame, pd.DataFrame, str] | None]],
+    filename: str,
+) -> plt.Figure:
+    """
+    Render a spaghetti plot from a 2D grid of panels.
+
+    Args:
+        grid: rows x cols of (title, block_acc, slopes, color) or None for empty cells.
+        filename: Output filename.
+    """
+    n_rows = len(grid)
+    n_cols = max(len(row) for row in grid)
+
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows), squeeze=False)
+
+    # Global y range across all panels
+    all_acc_parts = []
+    for row in grid:
+        for cell in row:
+            if cell is not None:
+                all_acc_parts.append(cell[1]["accuracy"].values)
+    all_acc = np.concatenate(all_acc_parts)
+    y_min, y_max = all_acc.min(), all_acc.max()
+    y_pad = (y_max - y_min) * 0.05
+    y_min -= y_pad
+    y_max += y_pad
+
+    x_fit = np.linspace(1, 8, 100)
+
+    for r, row in enumerate(grid):
+        for c in range(n_cols):
+            ax = axes[r][c]
+            cell = row[c] if c < len(row) else None
+
+            if cell is None:
+                ax.set_visible(False)
+                continue
+
+            title, ba, sl, color = cell
+            pids = ba["participant_id"].unique()
+
+            for pid in pids:
+                p_data = ba[ba["participant_id"] == pid].sort_values("block")
+                p_slope = sl[sl["participant_id"] == pid]
+                blocks = p_data["block"].values
+                acc = p_data["accuracy"].values
+
+                ax.scatter(blocks, acc, s=12, color=color, alpha=0.25, zorder=3, linewidths=0)
+
+                if not p_slope.empty:
+                    a_val = p_slope["a"].iloc[0]
+                    b_val = p_slope["b"].iloc[0]
+                    y_fit = log_linear(x_fit, a_val, b_val)
+                    ax.plot(x_fit, y_fit, color=color, alpha=0.2, linewidth=0.8, zorder=2)
+
+            ax.set_title(f"{title} (n={len(pids)})", fontsize=11, fontweight="bold")
+            ax.set_xlim(0.5, 8.5)
+            ax.set_ylim(y_min, y_max)
+            ax.set_xticks(range(1, 9))
+            ax.set_xlabel("Block", fontsize=9)
+            if c == 0:
+                ax.set_ylabel("Accuracy (%)", fontsize=9)
+
+            ax.spines["top"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.spines["left"].set_linewidth(0.5)
+            ax.spines["bottom"].set_linewidth(0.5)
+            ax.tick_params(axis="both", length=3, width=0.5)
+
+    fig.tight_layout()
+
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
     return fig
 
 
@@ -1999,10 +2163,10 @@ def main():
         visualize_original_individual_curves(pc_block_acc, pc_slopes, max_per_group=20, cols_per_group=3,
                                             cond_labels={"P": "P-match", "C": "Arrhythmic Control"})
 
-        # Load T-nonmatch data for strip plot
-        print("\nLoading T-nonmatch data...")
+        # Load T-nonMatch data for strip plot
+        print("\nLoading T-nonMatch data...")
         tn_block_acc, tn_slopes = load_original_paper_data(args.original_data_dir, groups={3: "TN"})
-        print(f"Loaded {len(tn_slopes)} participants (T-nonmatch)")
+        print(f"Loaded {len(tn_slopes)} participants (T-nonMatch)")
 
         # Prepare data for strip plot - use PROVIDED learning rates for original data
         print("\nLoading provided learning rates from groupLR_forLMM.csv...")
@@ -2030,6 +2194,44 @@ def main():
             p_slopes_only, t_slopes_only, tn_slopes_only, c_slopes_only,
             rep_p_slopes_only, rep_t_slopes_only
         )
+
+        # Spaghetti plots: individual learning curves overlaid per group
+        print("\nGenerating spaghetti plots...")
+        rep_day1_block_acc = block_acc[block_acc["day_index"] == 1]
+        rep_day1_slopes_all = slopes[slopes["day_index"] == 1]
+
+        # Helper to extract (title, block_acc, slopes, color) for a condition
+        def _panel(ba, sl, cond, label, color, section):
+            ba_c = ba[ba["cond"] == cond]
+            sl_c = sl[sl["cond"] == cond]
+            return (f"{section}: {label}", ba_c, sl_c, color)
+
+        orig_t = _panel(orig_block_acc, orig_slopes, "T", "T-match", "#1f5f8a", "Original")
+        orig_p = _panel(orig_block_acc, orig_slopes, "P", "P-match", "#2d8a2d", "Original")
+        orig_tn = _panel(tn_block_acc, tn_slopes, "TN", "T-nonMatch", "#9370DB", "Original")
+        orig_c = _panel(control_block_acc, control_slopes, "C", "Arrhythmic Control", "#666666", "Original")
+        rep_t = _panel(rep_day1_block_acc, rep_day1_slopes_all, "T", "T-match", "#1f5f8a", "Replication")
+        rep_p = _panel(rep_day1_block_acc, rep_day1_slopes_all, "P", "P-match", "#2d8a2d", "Replication")
+
+        # Plot 1: all groups (4 orig on top, 2 rep on bottom)
+        _spaghetti_grid([
+            [orig_t, orig_p, orig_tn, orig_c],
+            [rep_t, rep_p, None, None],
+        ], "spaghetti_all.png")
+
+        # Plot 2: T-match and P-match comparison (2x2)
+        _spaghetti_grid([
+            [orig_t, rep_t],
+            [orig_p, rep_p],
+        ], "spaghetti_comparison.png")
+
+        # Leave-one-out sensitivity plot (original provided learning rates)
+        print("\nGenerating leave-one-out sensitivity plot...")
+        visualize_leave_one_out(provided_slopes)
+
+        # Validation strip plot: provided vs recomputed learning rates
+        print("\nGenerating validation strip plot (provided vs recomputed)...")
+        visualize_validation_strip_plot(provided_slopes, orig_slopes, tn_slopes)
 
         # T-tests: Compare replication vs original learning rates
         print("\n=== T-tests: Replication vs Original Learning Rates ===")
