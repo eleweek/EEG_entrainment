@@ -1395,31 +1395,45 @@ def visualize_lr_strip_plot(
     orig_c_slopes: pd.DataFrame,
     rep_p_slopes: pd.DataFrame,
     rep_t_slopes: pd.DataFrame,
+    compact: bool = False,
 ) -> plt.Figure:
-    """Dot plot showing individual learning rates for each group."""
-    all_orig_values = np.concatenate([
-        orig_p_slopes["b"].values, orig_t_slopes["b"].values,
-        orig_tn_slopes["b"].values, orig_c_slopes["b"].values,
-    ])
+    """Dot plot showing individual learning rates for each group.
 
-    fig, ax = plt.subplots(figsize=(10, 7))
-
-    groups_info = [
-        ("Original pooled", all_orig_values, "#333333", 0),
-        ("Arrhythmic Control", orig_c_slopes["b"].values, "#666666", 0),
-        ("T-nonMatch", orig_tn_slopes["b"].values, "#9370DB", 0),
-        ("P-match", orig_p_slopes["b"].values, "#2d8a2d", 0),
-        ("T-match", orig_t_slopes["b"].values, "#1f5f8a", 0),
-        ("P-match", rep_p_slopes["b"].values, "#2d8a2d", 1),
-        ("T-match", rep_t_slopes["b"].values, "#1f5f8a", 1),
-    ]
+    Args:
+        compact: If True, show only P-match and T-match (no pooled, TnM, or control).
+    """
+    if compact:
+        fig, ax = plt.subplots(figsize=(10, 5))
+        groups_info = [
+            ("P-match", orig_p_slopes["b"].values, "#2d8a2d", 0),
+            ("T-match", orig_t_slopes["b"].values, "#1f5f8a", 0),
+            ("P-match", rep_p_slopes["b"].values, "#2d8a2d", 1),
+            ("T-match", rep_t_slopes["b"].values, "#1f5f8a", 1),
+        ]
+        filename = "strip_plot_compact.png"
+    else:
+        all_orig_values = np.concatenate([
+            orig_p_slopes["b"].values, orig_t_slopes["b"].values,
+            orig_tn_slopes["b"].values, orig_c_slopes["b"].values,
+        ])
+        fig, ax = plt.subplots(figsize=(10, 7))
+        groups_info = [
+            ("Original pooled", all_orig_values, "#333333", 0),
+            ("Arrhythmic Control\n(recomputed)", orig_c_slopes["b"].values, "#666666", 0),
+            ("T-nonMatch\n(recomputed)", orig_tn_slopes["b"].values, "#9370DB", 0),
+            ("P-match", orig_p_slopes["b"].values, "#2d8a2d", 0),
+            ("T-match", orig_t_slopes["b"].values, "#1f5f8a", 0),
+            ("P-match", rep_p_slopes["b"].values, "#2d8a2d", 1),
+            ("T-match", rep_t_slopes["b"].values, "#1f5f8a", 1),
+        ]
+        filename = "strip_plot.png"
 
     _render_strip_plot(ax, groups_info,
                        section_labels={0: "Original Study", 1: "Replication, Day 1"},
                        x_label="Learning Rates by Group")
 
     fig.tight_layout()
-    fig.savefig("strip_plot.png", dpi=300, bbox_inches="tight")
+    fig.savefig(filename, dpi=300, bbox_inches="tight")
     return fig
 
 
@@ -1450,6 +1464,27 @@ def visualize_validation_strip_plot(
 
     fig.tight_layout()
     fig.savefig("validation_strip_plot.png", dpi=300, bbox_inches="tight")
+    return fig
+
+
+def visualize_day2_strip_plot(
+    day2_slopes: pd.DataFrame,
+) -> plt.Figure:
+    """Strip plot of Day 2 (second session) learning rates by group."""
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    groups_info = [
+        ("T-nonMatch", day2_slopes[day2_slopes["cond"] == "TN"]["b"].values, "#9370DB", 0),
+        ("P-match", day2_slopes[day2_slopes["cond"] == "P"]["b"].values, "#2d8a2d", 0),
+        ("T-match", day2_slopes[day2_slopes["cond"] == "T"]["b"].values, "#1f5f8a", 0),
+    ]
+
+    _render_strip_plot(ax, groups_info,
+                       section_labels={0: "Original Study, Day 2"},
+                       x_label="Learning Rates by Group")
+
+    fig.tight_layout()
+    fig.savefig("strip_plot_day2.png", dpi=300, bbox_inches="tight")
     return fig
 
 
@@ -2194,6 +2229,18 @@ def main():
             p_slopes_only, t_slopes_only, tn_slopes_only, c_slopes_only,
             rep_p_slopes_only, rep_t_slopes_only
         )
+        visualize_lr_strip_plot(
+            p_slopes_only, t_slopes_only, tn_slopes_only, c_slopes_only,
+            rep_p_slopes_only, rep_t_slopes_only, compact=True
+        )
+
+        # Day 2 strip plot (original study, second session)
+        print("\nGenerating Day 2 strip plot...")
+        day2_slopes = load_provided_learning_rates(".", filename="groupLR_postLMM.csv")
+        if day2_slopes is not None:
+            visualize_day2_strip_plot(day2_slopes)
+        else:
+            print("  groupLR_postLMM.csv not found, skipping day 2 strip plot")
 
         # Spaghetti plots: individual learning curves overlaid per group
         print("\nGenerating spaghetti plots...")
