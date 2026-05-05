@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from scipy import stats
 import statsmodels.api as sm
-import statsmodels.formula.api as smf
 from statsmodels.regression.quantile_regression import QuantReg
 
 
@@ -478,58 +477,6 @@ def run_h3_between_groups_day1_intercept(slopes: pd.DataFrame, n_perm: int = 100
 def run_h3_between_groups_day2_intercept(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0, two_sided: bool = False) -> None:
     """H3 (exploratory): Day-2 between-groups comparison on intercept a."""
     run_between_groups_test(slopes, day_index=2, column="a", label="H3 (exploratory)", n_perm=n_perm, seed=seed, two_sided=two_sided)
-
-
-def run_ancova_lr_controlling_offset(slopes: pd.DataFrame) -> None:
-    """
-    Mixed-effects ANCOVA: Does condition affect LR after controlling for offset and day?
-
-    Model: b ~ cond + a + day + (1|participant_id)
-
-    This answers: "If both conditions started at the same offset and day,
-    which learning rate would be higher?"
-    """
-    print("\n=== Mixed-effects ANCOVA: LR ~ condition + offset + day + (1|participant) ===")
-
-    # Prepare data - need numeric coding for condition
-    data = slopes.copy()
-    data["cond_T"] = (data["cond"] == "T").astype(int)  # T=1, P=0
-    data["day2"] = (data["day_index"] == 2).astype(int)  # Day2=1, Day1=0
-
-    # Center offset for easier interpretation
-    data["a_centered"] = data["a"] - data["a"].mean()
-
-    # Fit mixed-effects model: b ~ cond + a_centered + day + (1|participant_id)
-    model = smf.mixedlm(
-        "b ~ cond_T + a_centered + day2",
-        data=data,
-        groups=data["participant_id"]
-    )
-    result = model.fit()
-
-    print(result.summary())
-
-    # Extract key results for interpretation
-    print("\n--- Interpretation ---")
-    coef_cond = result.fe_params["cond_T"]
-    pval_cond = result.pvalues["cond_T"]
-    coef_offset = result.fe_params["a_centered"]
-    pval_offset = result.pvalues["a_centered"]
-    coef_day = result.fe_params["day2"]
-    pval_day = result.pvalues["day2"]
-
-    print(f"Condition effect (T vs P): {coef_cond:.4f} (p = {pval_cond:.4g})")
-    print(f"  -> At the same offset/day, T-match LR is {coef_cond:.4f} {'higher' if coef_cond > 0 else 'lower'} than P-match")
-    print(f"Offset effect: {coef_offset:.4f} (p = {pval_offset:.4g})")
-    print(f"  -> For each 1% increase in offset, LR changes by {coef_offset:.4f}")
-    print(f"Day effect (Day 2 vs Day 1): {coef_day:.4f} (p = {pval_day:.4g})")
-    print(f"  -> Day 2 LR is {coef_day:.4f} {'higher' if coef_day > 0 else 'lower'} than Day 1")
-
-    if pval_cond < 0.05:
-        print("\nConclusion: Condition effect on LR is significant even after controlling for offset and day.")
-    else:
-        print("\nConclusion: Condition effect on LR is NOT significant after controlling for offset and day.")
-        print("  -> The apparent LR difference may be driven by offset/day differences.")
 
 
 def visualize_offset_vs_lr(slopes: pd.DataFrame) -> plt.Figure:
@@ -2234,82 +2181,6 @@ def main():
         print(f"\nP-match (filtered LR≥-1): Replication (n={len(rep_p_filtered_lr)}, mean={rep_p_filtered_lr.mean():.3f}) vs Original (n={len(orig_p_filtered_lr)}, mean={orig_p_filtered_lr.mean():.3f})")
         print(f"  t({pf_result.df:.1f}) = {pf_result.statistic:.3f}, p = {pf_result.pvalue:.4f}")
 
-        # Mixed-effects ANCOVA: P-match replication vs original controlling for offset
-        print("\n=== ANCOVA: P-match (all) LR ~ study + offset ===")
-        print("Question: Is replication P-match LR higher than original, after controlling for offset?")
-
-        # Combine original and replication P-match data (all participants)
-        orig_p_data = orig_slopes[orig_slopes["cond"] == "P"].copy()
-        orig_p_data["study"] = "original"
-
-        rep_p_data = rep_day1_slopes[rep_day1_slopes["cond"] == "P"].copy()
-        rep_p_data["study"] = "replication"
-
-        combined_p = pd.concat([orig_p_data, rep_p_data], ignore_index=True)
-        combined_p["study_replication"] = (combined_p["study"] == "replication").astype(int)
-        combined_p["a_centered"] = combined_p["a"] - combined_p["a"].mean()
-
-        # Fit model: LR ~ study + offset
-        # Note: No random effects needed since each participant is in only one study
-        import statsmodels.formula.api as smf
-        model = smf.ols("b ~ study_replication + a_centered", data=combined_p)
-        result = model.fit()
-
-        print(result.summary())
-
-        coef_study = result.params["study_replication"]
-        pval_study = result.pvalues["study_replication"]
-        coef_offset = result.params["a_centered"]
-        pval_offset = result.pvalues["a_centered"]
-
-        print("\n--- Interpretation ---")
-        print(f"Study effect (replication vs original): {coef_study:.4f} (p = {pval_study:.4f})")
-        print(f"  -> At the same offset, replication P-match LR is {coef_study:.4f} {'higher' if coef_study > 0 else 'lower'} than original")
-        print(f"Offset effect: {coef_offset:.4f} (p = {pval_offset:.4f})")
-        print(f"  -> For each 1% increase in offset, LR changes by {coef_offset:.4f}")
-
-        if pval_study < 0.05:
-            print("\nConclusion: Replication effect is significant even after controlling for offset.")
-        else:
-            print("\nConclusion: Replication effect is NOT significant after controlling for offset.")
-
-        # ANCOVA on filtered data (LR >= -1)
-        print("\n=== ANCOVA: P-match (filtered LR≥-1) LR ~ study + offset ===")
-        print("Question: Same as above, but excluding participants with LR < -1")
-
-        # Combine filtered P-match data
-        orig_p_filtered_data = orig_slopes[(orig_slopes["cond"] == "P") & (orig_slopes["b"] >= -1)].copy()
-        orig_p_filtered_data["study"] = "original"
-
-        rep_p_filtered_data = rep_day1_slopes[(rep_day1_slopes["cond"] == "P") & (rep_day1_slopes["b"] >= -1)].copy()
-        rep_p_filtered_data["study"] = "replication"
-
-        combined_p_filtered = pd.concat([orig_p_filtered_data, rep_p_filtered_data], ignore_index=True)
-        combined_p_filtered["study_replication"] = (combined_p_filtered["study"] == "replication").astype(int)
-        combined_p_filtered["a_centered"] = combined_p_filtered["a"] - combined_p_filtered["a"].mean()
-
-        # Fit model on filtered data
-        model_filtered = smf.ols("b ~ study_replication + a_centered", data=combined_p_filtered)
-        result_filtered = model_filtered.fit()
-
-        print(result_filtered.summary())
-
-        coef_study_f = result_filtered.params["study_replication"]
-        pval_study_f = result_filtered.pvalues["study_replication"]
-        coef_offset_f = result_filtered.params["a_centered"]
-        pval_offset_f = result_filtered.pvalues["a_centered"]
-
-        print("\n--- Interpretation ---")
-        print(f"Study effect (replication vs original): {coef_study_f:.4f} (p = {pval_study_f:.4f})")
-        print(f"  -> At the same offset, replication P-match LR is {coef_study_f:.4f} {'higher' if coef_study_f > 0 else 'lower'} than original")
-        print(f"Offset effect: {coef_offset_f:.4f} (p = {pval_offset_f:.4f})")
-        print(f"  -> For each 1% increase in offset, LR changes by {coef_offset_f:.4f}")
-
-        if pval_study_f < 0.05:
-            print("\nConclusion: Replication effect is significant even after controlling for offset (filtered data).")
-        else:
-            print("\nConclusion: Replication effect is NOT significant after controlling for offset (filtered data).")
-
         plt.show()
         return
 
@@ -2322,7 +2193,6 @@ def main():
     run_h2_between_groups_day1(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=False)
     run_h3_between_groups_day1_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
     run_h3_between_groups_day2_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
-    run_ancova_lr_controlling_offset(slopes)
 
     # Visualize
     drop_n = 0 if use_sliding else args.drop_first_n_blocks
