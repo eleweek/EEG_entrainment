@@ -173,24 +173,6 @@ def load_trials(
     return df
 
 
-def drop_first_n_trials(df: pd.DataFrame, n: int) -> pd.DataFrame:
-    """
-    Drop the first N trials from each session.
-
-    This simulates a practice block - the original study had 50 practice trials
-    before the main task began.
-    """
-    if n <= 0:
-        return df
-
-    def drop_first_n(session_df: pd.DataFrame) -> pd.DataFrame:
-        # Sort by trial_index to ensure we drop the first N
-        session_df = session_df.sort_values("trial_index")
-        return session_df.iloc[n:]
-
-    return df.groupby(["participant_id", "session_id"], group_keys=False).apply(drop_first_n)
-
-
 def add_day_index(df_trials: pd.DataFrame) -> pd.DataFrame:
     """
     Add day_index per participant based on session start_ts order:
@@ -209,76 +191,11 @@ def add_day_index(df_trials: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def compute_sliding_window_accuracy(
-    trials: pd.DataFrame,
-    window_size: int = 100,
-    step_size: int | None = None,
-    n_blocks: int = 8,
-) -> pd.DataFrame:
-    """
-    Compute accuracy using a sliding window over trials.
-
-    Returns a DataFrame with fractional block positions (1.0 to n_blocks)
-    and corresponding accuracies.
-
-    Args:
-        trials: DataFrame with columns [participant_id, session_id, day_index, cond, trial_index, correct]
-        window_size: Number of trials in each window
-        step_size: Step between windows (default: window_size // 8 for ~64 points per session)
-        n_blocks: Number of blocks to map to (for x-axis scaling)
-
-    Returns:
-        DataFrame with columns [participant_id, session_id, day_index, cond, block, accuracy]
-        where 'block' is a fractional value from 1.0 to n_blocks
-    """
-    if step_size is None:
-        step_size = max(1, window_size // 8)
-
-    rows = []
-
-    for (pid, sid, day), session_trials in trials.groupby(
-        ["participant_id", "session_id", "day_index"], sort=True
-    ):
-        session_trials = session_trials.sort_values("trial_index").reset_index(drop=True)
-        n_trials = len(session_trials)
-        cond = session_trials["cond"].iloc[0]
-
-        # Slide window over trials
-        for start in range(0, n_trials - window_size + 1, step_size):
-            end = start + window_size
-            window = session_trials.iloc[start:end]
-            acc = window["correct"].mean() * 100  # Convert to percentage
-
-            # Map center of window to fractional block position
-            # Center of window in trial space (0 to n_trials-1)
-            center = (start + end - 1) / 2
-            # Map to block space (1.0 to n_blocks)
-            # trial 0 -> block 1.0, trial n_trials-1 -> block n_blocks
-            block_pos = 1.0 + (center / (n_trials - 1)) * (n_blocks - 1)
-
-            rows.append({
-                "participant_id": pid,
-                "session_id": sid,
-                "day_index": day,
-                "cond": cond,
-                "block": block_pos,
-                "accuracy": acc,
-            })
-
-    return pd.DataFrame(rows)
-
-
-def fit_slopes_per_session(block_acc: pd.DataFrame, method: str = "ols", drop_first_n_blocks: int = 0) -> pd.DataFrame:
+def fit_slopes_per_session(block_acc: pd.DataFrame, method: str = "ols") -> pd.DataFrame:
     rows = []
 
     for (pid, sid, day), sub in block_acc.groupby(["participant_id", "session_id", "day_index"], sort=True):
         sub = sub.sort_values("block")
-
-        # Drop first N blocks if requested (to exclude warm-up effects)
-        if drop_first_n_blocks > 0:
-            sub = sub[sub["block"] > drop_first_n_blocks].copy()
-            # Renumber blocks so first remaining block is 1
-            sub["block"] = sub["block"] - drop_first_n_blocks
 
         # condition is constant within the session/day
         cond = sub["cond"].iloc[0]
@@ -560,8 +477,6 @@ def visualize_offset_vs_lr(slopes: pd.DataFrame) -> plt.Figure:
 def visualize_group_average_both_days(
     block_acc: pd.DataFrame,
     slopes: pd.DataFrame,
-    drop_first_n_blocks: int = 0,
-    use_sliding: bool = False,
     min_lr_1st_day: float | None = None,
 ) -> plt.Figure:
     """
@@ -588,10 +503,6 @@ def visualize_group_average_both_days(
         slopes = slopes[slopes["participant_id"].isin(valid_pids)].copy()
         title_suffix = f" (excluded {n_excluded} participants with day 1 LR < {min_lr_1st_day})"
 
-    # Drop first N blocks if requested and renumber (only for discrete blocks)
-    if drop_first_n_blocks > 0 and not use_sliding:
-        block_acc = block_acc[block_acc["block"] > drop_first_n_blocks].copy()
-        block_acc["block"] = block_acc["block"] - drop_first_n_blocks
     # Determine each participant's first-day condition (group)
     day1_cond = (
         slopes[slopes["day_index"] == 1][["participant_id", "cond"]]
@@ -627,7 +538,7 @@ def visualize_group_average_both_days(
             acc = grp_means["accuracy"].values
 
             # Shift Day 2 blocks for plotting (after Day 1's range)
-            max_block = 8 - drop_first_n_blocks if not use_sliding else 8
+            max_block = 8
             blocks_plot = blocks_original + (max_block if day == 2 else 0)
 
             color = colors[(group, day)]
@@ -664,7 +575,7 @@ def visualize_group_average_both_days(
                 color=color, fontsize=8, va=va, ha="center")
 
     # Minimal day separator (at boundary between Day 1 and Day 2)
-    n_blocks = 8 if use_sliding else 8 - drop_first_n_blocks
+    n_blocks = 8
     ax.axvline(x=n_blocks + 0.5, color="#dddddd", linewidth=0.5, zorder=0)
 
     # Tufte-style axis
@@ -697,8 +608,6 @@ def visualize_group_average_both_days(
 def visualize_learning_curves(
     block_acc: pd.DataFrame,
     slopes: pd.DataFrame,
-    drop_first_n_blocks: int = 0,
-    use_sliding: bool = False,
     day1_only: bool = False,
 ) -> plt.Figure:
     """
@@ -709,12 +618,7 @@ def visualize_learning_curves(
       - day1_only: Column 0: P-first (Day 1), Column 1: T-first (Day 1)
     Two participants per row (one from each group).
     """
-    # Drop first N blocks if requested and renumber (only for discrete blocks)
-    if drop_first_n_blocks > 0 and not use_sliding:
-        block_acc = block_acc[block_acc["block"] > drop_first_n_blocks].copy()
-        block_acc["block"] = block_acc["block"] - drop_first_n_blocks
-
-    n_blocks = 8 if use_sliding else 8 - drop_first_n_blocks
+    n_blocks = 8
 
     # Determine each participant's first-day condition
     day1_cond = (
@@ -1904,25 +1808,6 @@ def main():
         help="Fitting method: 'ols' (L2 loss, default) or 'l1' (L1 loss / median regression)"
     )
     parser.add_argument(
-        "--drop-first-n-blocks",
-        type=int,
-        default=0,
-        help="Drop the first N blocks from each session before fitting (to exclude warm-up effects)"
-    )
-    parser.add_argument(
-        "--drop-first-n-trials",
-        type=int,
-        default=0,
-        help="Drop the first N trials from each session (to simulate practice trials, e.g., 50)"
-    )
-    parser.add_argument(
-        "--sliding-window",
-        type=int,
-        default=0,
-        metavar="SIZE",
-        help="Use sliding window of SIZE trials instead of fixed blocks (e.g., 100). Produces ~64 points per session."
-    )
-    parser.add_argument(
         "--original-data-dir",
         type=str,
         default=None,
@@ -1956,34 +1841,20 @@ def main():
         print("No data loaded. Exiting.")
         return
 
-    # Drop first N trials if requested (simulates practice block)
-    if args.drop_first_n_trials > 0:
-        print(f"  Dropping first {args.drop_first_n_trials} trials from each session")
-        df = drop_first_n_trials(df, args.drop_first_n_trials)
-        print(f"  {df.shape[0]} trials remaining")
-
     # Add day index
     df = add_day_index(df)
 
     # Compute block accuracies (scaled to 0-100%)
-    if args.sliding_window > 0:
-        print(f"  Using sliding window of {args.sliding_window} trials")
-        block_acc = compute_sliding_window_accuracy(df, window_size=args.sliding_window)
-        use_sliding = True
-    else:
-        block_acc = (
-            df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
-            .mean()
-            .reset_index(name="accuracy")
-        )
-        block_acc["accuracy"] = block_acc["accuracy"] * 100
-        use_sliding = False
+    block_acc = (
+        df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
+        .mean()
+        .reset_index(name="accuracy")
+    )
+    block_acc["accuracy"] = block_acc["accuracy"] * 100
 
     # Fit learning rates
     print(f"Fitting with method: {args.fit_method}")
-    if args.drop_first_n_blocks > 0 and not use_sliding:
-        print(f"  Dropping first {args.drop_first_n_blocks} block(s) from each session")
-    slopes = fit_slopes_per_session(block_acc, method=args.fit_method, drop_first_n_blocks=0 if use_sliding else args.drop_first_n_blocks)
+    slopes = fit_slopes_per_session(block_acc, method=args.fit_method)
 
     # Export replication data to CSV
     block_acc[["participant_id", "cond", "day_index", "block", "accuracy"]].sort_values(
@@ -2195,12 +2066,11 @@ def main():
     run_h3_between_groups_day2_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
 
     # Visualize
-    drop_n = 0 if use_sliding else args.drop_first_n_blocks
-    visualize_learning_curves(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding)
-    visualize_learning_curves(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding, day1_only=True)  # Day 1 only comparison
+    visualize_learning_curves(block_acc, slopes)
+    visualize_learning_curves(block_acc, slopes, day1_only=True)  # Day 1 only comparison
     visualize_offset_vs_lr(slopes)
-    visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding)
-    visualize_group_average_both_days(block_acc, slopes, drop_first_n_blocks=drop_n, use_sliding=use_sliding, min_lr_1st_day=0)  # Exclude negative day 1 LRs
+    visualize_group_average_both_days(block_acc, slopes)
+    visualize_group_average_both_days(block_acc, slopes, min_lr_1st_day=0)  # Exclude negative day 1 LRs
     plt.show()
 
 
