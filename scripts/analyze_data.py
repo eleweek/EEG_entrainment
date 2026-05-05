@@ -945,7 +945,7 @@ def parse_participant_list(value: str | None) -> list[str] | None:
 # Original paper data adapters
 # -----------------------------
 
-def load_original_paper_data(
+def refit_approximate_original_paper_curves(
     data_dir: str,
     groups: dict[int, str] | None = None
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -1042,191 +1042,10 @@ def load_original_paper_data(
 
     slopes = pd.DataFrame(slope_rows)
 
-    # Comprehensive validation: compare with provided learning rates if available
-    print("\n" + "=" * 60)
-    print("VALIDATING LEARNING RATE COMPUTATION")
-    print("=" * 60)
-
-    # Check for groupLR_forLMM.csv (provided learning rates)
-    lr_provided_path = os.path.join(data_dir, "groupLR_forLMM.csv")
-
-    if os.path.exists(lr_provided_path):
-        df_lr_provided = pd.read_csv(lr_provided_path)
-        print(f"\nFound provided learning rates: {lr_provided_path}")
-        print(f"Columns: {list(df_lr_provided.columns)}")
-
-        # Map groupID to phase/match for comparison
-        # groupID: 1=Peak-Match (phase=1, match=1), 2=Trough-Match (phase=2, match=1),
-        #          3=Trough-NonMatch (phase=2, match=2), 4=Control
-        group_mapping = {
-            1: (1, 1, "P", "Peak-Match"),
-            2: (2, 1, "T", "Trough-Match"),
-            3: (2, 2, "TN", "Trough-NonMatch"),
-            4: (None, None, "C", "Control"),
-        }
-
-        # For validation, we need to load ALL groups, not just the requested ones
-        # Build a complete dataset for validation
-        all_validation_slopes = []
-        for gid in [1, 2, 3, 4]:
-            if gid in groups:
-                # Already computed, use existing data
-                cond = groups[gid]
-                group_slopes = slopes[slopes["cond"] == cond].copy()
-                group_slopes["groupID"] = gid
-                all_validation_slopes.append(group_slopes)
-            else:
-                # Need to compute this group for validation
-                phase, match, cond_code, label = group_mapping.get(gid, (None, None, None, None))
-                if phase is None:
-                    continue  # Skip control if no phase/match
-
-                group_data = df_acc[df_acc['groupID'] == gid]
-                if len(group_data) == 0:
-                    continue
-
-                # Compute slopes for this group
-                temp_slopes = []
-                for subj in range(1, 21):
-                    subj_data = group_data[group_data['assumed_subID'] == subj]
-                    if len(subj_data) != 3:
-                        continue
-
-                    avg_accs = subj_data[blocks].mean(axis=0).values * 100
-                    pid = f"validation_{cond_code}_{subj:02d}"
-
-                    # Create temporary block_acc data
-                    temp_blocks = np.arange(1, 9)
-                    fr = fit_learning_rate(temp_blocks, avg_accs, method="ols")
-
-                    temp_slopes.append({
-                        "participant_id": pid,
-                        "groupID": gid,
-                        "cond": cond_code,
-                        "b": fr.b,
-                    })
-
-                if temp_slopes:
-                    temp_df = pd.DataFrame(temp_slopes)
-                    all_validation_slopes.append(temp_df)
-
-        if all_validation_slopes:
-            validation_slopes_df = pd.concat(all_validation_slopes, ignore_index=True)
-
-            print("\n" + "-" * 60)
-            print("Comparing computed vs. provided learning rates:")
-            print("-" * 60)
-
-            mismatches = []
-            tolerance = 2.0  # Allow up to 2.0 difference in mean LR
-
-            for gid in [1, 2, 3, 4]:
-                if gid not in group_mapping:
-                    continue
-
-                phase, match, cond_code, label = group_mapping[gid]
-
-                # Get our computed learning rates for this group
-                computed_lr = validation_slopes_df[validation_slopes_df["groupID"] == gid]["b"].values
-
-                if len(computed_lr) == 0:
-                    continue  # Skip if we don't have data for this group
-
-                # Get provided learning rates for this group (if available)
-                if phase is not None and match is not None:
-                    provided_lr = df_lr_provided[
-                        (df_lr_provided['phase'] == phase) &
-                        (df_lr_provided['match'] == match)
-                    ]['LR'].values
-                else:
-                    # Control group might not be in the provided file
-                    provided_lr = np.array([])
-
-                if len(provided_lr) == 0:
-                    print(f"\n{label} (Group {gid}):")
-                    print("  No provided LR found in groupLR_forLMM.csv")
-                    continue
-
-                # Compute statistics
-                provided_mean = provided_lr.mean()
-                computed_mean = computed_lr.mean()
-                diff = abs(provided_mean - computed_mean)
-
-                # Sort both arrays for correlation
-                provided_sorted = np.sort(provided_lr)
-                computed_sorted = np.sort(computed_lr)
-
-                # Compute correlation (if same length)
-                if len(provided_lr) == len(computed_lr):
-                    corr = np.corrcoef(provided_sorted, computed_sorted)[0, 1]
-                else:
-                    corr = np.nan
-
-                print(f"\n{label} (Group {gid}):")
-                print(f"  Provided LR:  {provided_mean:7.3f} ± {provided_lr.std():6.3f} (n={len(provided_lr)})")
-                print(f"  Computed LR:  {computed_mean:7.3f} ± {computed_lr.std():6.3f} (n={len(computed_lr)})")
-                print(f"  |Difference|: {diff:7.3f}")
-                if not np.isnan(corr):
-                    print(f"  Correlation:  {corr:7.3f}", end="")
-
-            if diff > tolerance:
-                print(" ✗ MISMATCH!")
-                mismatches.append({
-                    'group': label,
-                    'provided': provided_mean,
-                    'computed': computed_mean,
-                    'diff': diff,
-                    'corr': corr
-                })
-            else:
-                print(" ✓ OK")
-
-        # Show example fit for one subject
-        if len(computed_lr_map) > 0:
-            example_pid = list(computed_lr_map.keys())[0]
-            example_data = block_acc[block_acc["participant_id"] == example_pid].sort_values("block")
-            example_slopes = slopes[slopes["participant_id"] == example_pid].iloc[0]
-
-            print("\n" + "-" * 60)
-            print(f"Example fit: {example_pid}")
-            print("-" * 60)
-            print(f"Fitted curve: y = {example_slopes['a']:.2f} + {example_slopes['b']:.2f}*log(x)")
-            print(f"Learning rate (b) = {example_slopes['b']:.3f}")
-            print(f"R² = {example_slopes['r2']:.3f}")
-            print("\nBlock | Accuracy | Fitted")
-            print("-" * 35)
-            for _, row in example_data.iterrows():
-                block_num = row['block']
-                actual = row['accuracy']
-                fitted = example_slopes['a'] + example_slopes['b'] * np.log(block_num)
-                print(f"  {int(block_num)}   |  {actual:6.2f}  | {fitted:6.2f}")
-
-        if mismatches:
-            print("\n" + "=" * 60)
-            print("⚠ VALIDATION WARNING")
-            print("=" * 60)
-            print(f"\nFound {len(mismatches)} group(s) with learning rate mismatch:")
-            for mm in mismatches:
-                print(f"  {mm['group']}: provided={mm['provided']:.3f}, "
-                     f"computed={mm['computed']:.3f}, diff={mm['diff']:.3f}")
-            print(f"\nTolerance: {tolerance}")
-            print("\nPossible reasons:")
-            print("  1. Different fitting method (OLS vs. curve_fit)")
-            print("  2. Subject ID assignment differences")
-            print("  3. Different preprocessing or filtering")
-        else:
-            print("\n" + "=" * 60)
-            print("✓ VALIDATION PASSED")
-            print("=" * 60)
-            print(f"All groups match within tolerance ({tolerance})")
-    else:
-        print("\nNo groupLR_forLMM.csv found in data directory.")
-        print("Skipping validation. Proceeding with computed learning rates only.")
-
     return block_acc, slopes
 
 
-def load_provided_learning_rates(data_dir: str, filename: str = "groupLR_forLMM.csv") -> pd.DataFrame | None:
+def load_original_paper_provided_learning_rates(data_dir: str, filename: str = "groupLR_forLMM.csv") -> pd.DataFrame | None:
     """
     Load provided learning rates from a CSV file.
 
@@ -2234,7 +2053,7 @@ def main():
         print(f"\nLoading original paper data from {args.original_data_dir}...")
 
         # Load P-match vs T-match
-        orig_block_acc, orig_slopes = load_original_paper_data(args.original_data_dir)
+        orig_block_acc, orig_slopes = refit_approximate_original_paper_curves(args.original_data_dir)
         print(f"Loaded {len(orig_slopes)} participants (P-match and T-match)")
 
         # Print fitted slopes
@@ -2243,7 +2062,7 @@ def main():
 
         # Load T-match vs Control (needed for aggregate chart)
         print("\nLoading T-match vs Control comparison...")
-        tc_block_acc, tc_slopes = load_original_paper_data(args.original_data_dir, groups={2: "T", 4: "C"})
+        tc_block_acc, tc_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={2: "T", 4: "C"})
         print(f"Loaded {len(tc_slopes)} participants (T-match and Control)")
 
         # Extract control data for aggregate chart
@@ -2252,7 +2071,7 @@ def main():
 
         # Load T-nonMatch (needed for specific aggregate chart)
         print("\nLoading T-nonMatch...")
-        tn_block_acc, tn_slopes = load_original_paper_data(args.original_data_dir, groups={3: "TN"})
+        tn_block_acc, tn_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={3: "TN"})
         print(f"Loaded {len(tn_slopes)} participants (T-nonMatch)")
 
         # Visualize P-match vs T-match individual curves
@@ -2283,7 +2102,7 @@ def main():
 
         # Load P-match vs Control
         print("\nLoading P-match vs Control comparison...")
-        pc_block_acc, pc_slopes = load_original_paper_data(args.original_data_dir, groups={1: "P", 4: "C"})
+        pc_block_acc, pc_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={1: "P", 4: "C"})
         print(f"Loaded {len(pc_slopes)} participants (P-match and Control)")
 
         # Print fitted slopes
@@ -2296,12 +2115,12 @@ def main():
 
         # Load T-nonMatch data for strip plot
         print("\nLoading T-nonMatch data...")
-        tn_block_acc, tn_slopes = load_original_paper_data(args.original_data_dir, groups={3: "TN"})
+        tn_block_acc, tn_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={3: "TN"})
         print(f"Loaded {len(tn_slopes)} participants (T-nonMatch)")
 
         # Prepare data for strip plot - use PROVIDED learning rates for original data
         print("\nLoading provided learning rates from groupLR_forLMM.csv...")
-        provided_slopes = load_provided_learning_rates(args.original_data_dir)
+        provided_slopes = load_original_paper_provided_learning_rates(args.original_data_dir)
 
         if provided_slopes is None:
             raise FileNotFoundError(
@@ -2332,7 +2151,7 @@ def main():
 
         # Day 2 strip plot (original study, second session)
         print("\nGenerating Day 2 strip plot...")
-        day2_slopes = load_provided_learning_rates(".", filename="groupLR_postLMM.csv")
+        day2_slopes = load_original_paper_provided_learning_rates(".", filename="groupLR_postLMM.csv")
         if day2_slopes is not None:
             visualize_day2_strip_plot(day2_slopes)
         else:
