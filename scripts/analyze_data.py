@@ -636,10 +636,10 @@ def visualize_learning_curves(
     # Layout: 2 columns (day1_only) or 4 columns (default)
     if day1_only:
         n_cols = 2
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(7, 1.25 * n_rows), squeeze=False)
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(7, 1.5 * n_rows), squeeze=False)
     else:
         n_cols = 4
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(14, 1.25 * n_rows), squeeze=False)
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(14, 1.5 * n_rows), squeeze=False)
 
     # Compute global y-axis range from data with small padding
     all_acc = block_acc["accuracy"].values
@@ -685,7 +685,7 @@ def visualize_learning_curves(
             x_fit = np.linspace(1, n_blocks, 100)
             y_fit = log_linear(x_fit, a, b)
             ax.plot(x_fit, y_fit, color=fit_color, linewidth=1, zorder=2)
-            fit_annotation = f"  LR={b:.2f}  off={a:.2f}  R²={r2:.2f}"
+            fit_annotation = f"   LR={b:.2f}   off={a:.2f}   R²={r2:.2f}"
 
         # Tufte-style: remove spines, keep only left and bottom
         ax.spines["top"].set_visible(False)
@@ -698,16 +698,14 @@ def visualize_learning_curves(
         # Minimal ticks
         ax.tick_params(axis="both", which="both", length=3, width=0.5, colors="#000000")
 
-        # Title with participant and fit info (day/condition shown in column headers)
-        ax.set_title(f"{pid}{fit_annotation}",
-                     fontsize=9, loc="left", color="#000000")
-
         ax.set_xlim(0.5, n_blocks + 0.5)
         ax.set_ylim(y_min, y_max)
         ax.set_xticks(range(1, n_blocks + 1))
+        ax.text(0, -0.14, f"{pid}{fit_annotation}", transform=ax.transAxes,
+                fontsize=8, ha="left", va="top", color="#000000", clip_on=False)
 
         if is_last_row:
-            ax.set_xlabel("Block", fontsize=8, color="#000000")
+            ax.set_xlabel("Block", fontsize=8, color="#000000", labelpad=2)
         else:
             ax.set_xticklabels([])
 
@@ -723,16 +721,18 @@ def visualize_learning_curves(
             # Column 1: T-first Day 1
             plot_participant(axes[row_idx, 1], pid_t, 1, is_last_row)
 
-            # Y-axis labels only on leftmost column
-            axes[row_idx, 0].set_ylabel("Accuracy", fontsize=8, color="#000000")
             axes[row_idx, 1].set_yticklabels([])
 
+        axes[0, 0].set_ylabel("Accuracy (%)", fontsize=8, color="#000000")
+
         fig.tight_layout(rect=(0, 0, 1, 0.95))
-        fig.subplots_adjust(wspace=0.15, hspace=0.4)
+        fig.subplots_adjust(wspace=0.15, hspace=0.44)
 
         # Add group headers at the top
-        fig.text(0.25, 0.98, "P-match (Day 1)", ha="center", va="top", fontsize=12, color="#000000")
-        fig.text(0.75, 0.98, "T-match (Day 1)", ha="center", va="top", fontsize=12, color="#000000")
+        fig.text(0.25, 0.965, "P-match (Day 1)", ha="center", va="top",
+                 fontsize=12, fontweight="bold", color="#000000")
+        fig.text(0.75, 0.965, "T-match (Day 1)", ha="center", va="top",
+                 fontsize=12, fontweight="bold", color="#000000")
 
     else:
         # Default: 4 columns (Day 1 + Day 2 for both groups)
@@ -752,17 +752,17 @@ def visualize_learning_curves(
             plot_participant(axes[row_idx, 2], pid_t, 1, is_last_row)
             plot_participant(axes[row_idx, 3], pid_t, 2, is_last_row)
 
-            # Y-axis labels only on leftmost of each group
+            # Y tick labels only on leftmost of each group
             for col_idx in range(4):
                 ax = axes[row_idx, col_idx]
-                if col_idx in (0, 2):
-                    ax.set_ylabel("Accuracy", fontsize=8, color="#000000")
-                else:
+                if col_idx not in (0, 2):
                     ax.set_yticklabels([])
 
         # Adjust layout with gap between the two groups
+        axes[0, 0].set_ylabel("Accuracy (%)", fontsize=8, color="#000000")
+
         fig.tight_layout(rect=(0, 0, 0.98, 0.95))
-        fig.subplots_adjust(wspace=0.15, hspace=0.4)
+        fig.subplots_adjust(wspace=0.15, hspace=0.44)
         # Add extra space between columns 1 and 2 (between P-first and T-first)
         for row_idx in range(n_rows):
             for col_idx in [2, 3]:
@@ -771,8 +771,10 @@ def visualize_learning_curves(
                 ax.set_position([pos.x0 + 0.03, pos.y0, pos.width, pos.height])
 
         # Add group headers at the top
-        fig.text(0.25, 0.99, "P-match first", ha="center", va="top", fontsize=13, color="#000000")
-        fig.text(0.75, 0.99, "T-match first", ha="center", va="top", fontsize=13, color="#000000")
+        fig.text(0.25, 0.975, "P-match first", ha="center", va="top",
+                 fontsize=13, fontweight="bold", color="#000000")
+        fig.text(0.75, 0.975, "T-match first", ha="center", va="top",
+                 fontsize=13, fontweight="bold", color="#000000")
 
         # Add column headers (Day + condition) above each column
         col_headers = ["Day 1, P-match", "Day 2, T-match", "Day 1, T-match", "Day 2, P-match"]
@@ -1435,7 +1437,7 @@ def visualize_original_individual_curves(
     n_cols = cols_per_group * 2
     n_rows = max(math.ceil(len(cond1_pids) / cols_per_group), math.ceil(len(cond2_pids) / cols_per_group))
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.5 * n_cols, 1.5 * n_rows), squeeze=False)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(2.5 * n_cols, 1.75 * n_rows), squeeze=False)
 
     # Global y-axis range across displayed participants only
     displayed_pids = list(cond1_pids) + list(cond2_pids)
@@ -1470,7 +1472,7 @@ def visualize_original_individual_curves(
             x_fit = np.linspace(1, 8, 100)
             y_fit = log_linear(x_fit, a, b)
             ax.plot(x_fit, y_fit, color=fit_color, linewidth=1, zorder=2)
-            fit_annotation = f"LR={b:.2f}  off={a:.2f}  R²={r2:.2f}"
+            fit_annotation = f"LR={b:.2f}   off={a:.2f}   R²={r2:.2f}"
 
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
@@ -1480,20 +1482,20 @@ def visualize_original_individual_curves(
         ax.spines["bottom"].set_linewidth(0.5)
 
         ax.tick_params(axis="both", which="both", length=3, width=0.5, colors="#000000")
-        ax.set_title(fit_annotation, fontsize=9, loc="left", color="#000000")
 
         ax.set_xlim(0.5, 8.5)
         ax.set_ylim(y_min, y_max)
         ax.set_xticks(range(1, 9))
+        if fit_annotation:
+            ax.text(0, -0.14, fit_annotation, transform=ax.transAxes,
+                    fontsize=8, ha="left", va="top", color="#000000", clip_on=False)
 
         if is_last_row:
-            ax.set_xlabel("Block", fontsize=8, color="#000000")
+            ax.set_xlabel("Block", fontsize=8, color="#000000", labelpad=2)
         else:
             ax.set_xticklabels([])
 
-        if show_ylabel:
-            ax.set_ylabel("Accuracy", fontsize=8, color="#000000")
-        else:
+        if not show_ylabel:
             ax.set_yticklabels([])
 
     for row_idx in range(n_rows):
@@ -1511,8 +1513,10 @@ def visualize_original_individual_curves(
             pid = cond2_pids[idx] if idx < len(cond2_pids) else None
             plot_one(axes[row_idx, cols_per_group + col], pid, is_last, show_ylabel=(col == 0))
 
+    axes[0, 0].set_ylabel("Accuracy (%)", fontsize=8, color="#000000")
+
     fig.tight_layout(rect=(0, 0, 1, 0.95))
-    fig.subplots_adjust(wspace=0.2, hspace=0.3)
+    fig.subplots_adjust(wspace=0.2, hspace=0.4)
 
     # Add extra space between condition 1 and condition 2 columns
     for row_idx in range(n_rows):
@@ -1522,8 +1526,10 @@ def visualize_original_individual_curves(
             ax.set_position([pos.x0 + 0.01, pos.y0, pos.width, pos.height])
 
     # Column headers (centered over each group's columns)
-    fig.text(0.25, 0.98, cond_labels[cond1], ha="center", va="top", fontsize=12, color="#000000")
-    fig.text(0.75, 0.98, cond_labels[cond2], ha="center", va="top", fontsize=12, color="#000000")
+    fig.text(0.25, 0.965, cond_labels[cond1], ha="center", va="top",
+             fontsize=12, fontweight="bold", color="#000000")
+    fig.text(0.75, 0.965, cond_labels[cond2], ha="center", va="top",
+             fontsize=12, fontweight="bold", color="#000000")
 
     fig.savefig(f"original learning rates {cond_labels[cond1]} vs {cond_labels[cond2]}.png", dpi=150, bbox_inches="tight")
     return fig
