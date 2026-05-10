@@ -1258,7 +1258,7 @@ def visualize_leave_one_out(
     t_lr = provided_slopes[provided_slopes["cond"] == "T"]["b"].values
     p_df = provided_slopes[provided_slopes["cond"] == "P"][["participant_id", "b"]].copy().reset_index(drop=True)
 
-    baseline_p = stats.ttest_ind(t_lr, p_df["b"].values, equal_var=False).pvalue
+    reported_p = 0.045
 
     results = []  # (participant_id, group, lr, p_without)
 
@@ -1287,22 +1287,22 @@ def visualize_leave_one_out(
     ax.set_ylim(1.25, -0.25)
 
     # Significance threshold
-    ax.axvline(x=0.05, color="red", linestyle="--", linewidth=1, alpha=0.7, label="p = 0.05")
+    ax.axvline(x=0.05, color="red", linestyle="-", linewidth=1, alpha=0.7, label="p = 0.05")
 
-    # Baseline p-value
-    ax.axvline(x=baseline_p, color="gray", linestyle=":", linewidth=1, alpha=0.7,
-               label=f"Baseline p = {baseline_p:.4f}")
+    # Reported p-value from the original analysis.
+    ax.axvline(x=reported_p, color="gray", linestyle=":", linewidth=1, alpha=0.7,
+               label="Reported p = 0.045")
 
-    ax.set_xlabel("Welch's p-value (two-tailed)", fontsize=10)
+    ax.set_xlabel("Welch's p-value (two-tailed)", fontsize=10, labelpad=8)
     ax.set_ylabel("")
     n_flip = sum(1 for r in results if r[3] >= 0.05)
     ax.set_title(
         "Leave-one-out sensitivity: T-match vs P-match\n"
         f"{n_flip}/{len(results)} single removals make p > 0.05",
-        fontsize=12, fontweight="bold"
+        fontsize=12, fontweight="bold", pad=16
     )
 
-    ax.legend(fontsize=8, loc="lower right")
+    ax.legend(fontsize=8, loc="center right", frameon=False)
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
