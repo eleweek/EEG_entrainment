@@ -1403,6 +1403,8 @@ def _spaghetti_grid(
             if r == 0 and c == 0:
                 ax.set_xlabel("Block", fontsize=9)
                 ax.set_ylabel("Accuracy (%)", fontsize=9, labelpad=8)
+            elif r == n_rows - 1 and c == 0:
+                pass
             else:
                 ax.set_xticklabels([])
                 if c != 0:
@@ -1863,8 +1865,18 @@ def main():
         metavar="DIR",
         help="Load and visualize original paper data (Michael et al., 2023) from DIR instead of study DB"
     )
+    parser.add_argument(
+        "--charts-save-dir",
+        type=str,
+        default="_generated_charts",
+        metavar="DIR",
+        help="Directory to save generated charts (default: _generated_charts)"
+    )
 
     args = parser.parse_args()
+
+    global OUTPUT_DIR
+    OUTPUT_DIR = args.charts_save_dir
 
     # Mutually exclusive data sources
     if args.db is not None and args.from_export is not None:
