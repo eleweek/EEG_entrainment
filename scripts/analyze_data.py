@@ -1102,7 +1102,8 @@ def visualize_lr_strip_plot(
 
     _render_strip_plot(ax, groups_info,
                        section_labels={0: "Original Study", 1: "Replication, Day 1"},
-                       x_label="Learning Rates by Group")
+                       x_label="Learning Rates by Group",
+                       first_gap=0.7 if compact else None)
 
     fig.tight_layout()
     fig.savefig(filename, dpi=300, bbox_inches="tight")
@@ -1278,11 +1279,12 @@ def visualize_leave_one_out(
     df = pd.DataFrame(results, columns=["participant_id", "group", "lr", "p_value"])
     df["group"] = df["group"] + " removed"
 
-    fig, ax = plt.subplots(figsize=(8, 3.5))
+    fig, ax = plt.subplots(figsize=(8, 2.4))
 
     palette = {"T-match removed": "#1f5f8a", "P-match removed": "#2d8a2d"}
     sns.swarmplot(data=df, x="p_value", y="group", palette=palette, size=4.5,
                   edgecolor="white", linewidth=0.5, alpha=0.7, ax=ax, orient="h")
+    ax.set_ylim(1.25, -0.25)
 
     # Significance threshold
     ax.axvline(x=0.05, color="red", linestyle="--", linewidth=1, alpha=0.7, label="p = 0.05")
@@ -1369,13 +1371,27 @@ def _spaghetti_grid(
                     y_fit = log_linear(x_fit, a_val, b_val)
                     ax.plot(x_fit, y_fit, color=color, alpha=0.2, linewidth=0.8, zorder=2)
 
-            ax.set_title(f"{title} (n={len(pids)})", fontsize=11, fontweight="bold")
+            ax.text(
+                1,
+                1,
+                f"{title} (n={len(pids)})",
+                transform=ax.get_xaxis_transform(),
+                fontsize=11,
+                fontweight="bold",
+                ha="left",
+                va="top",
+                color="#000000",
+            )
             ax.set_xlim(0.5, 8.5)
             ax.set_ylim(y_min, y_max)
             ax.set_xticks(range(1, 9))
-            ax.set_xlabel("Block", fontsize=9)
-            if c == 0:
-                ax.set_ylabel("Accuracy (%)", fontsize=9)
+            if r == 0 and c == 0:
+                ax.set_xlabel("Block", fontsize=9)
+                ax.set_ylabel("Accuracy (%)", fontsize=9, labelpad=8)
+            else:
+                ax.set_xticklabels([])
+                if c != 0:
+                    ax.set_yticklabels([])
 
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
@@ -1383,7 +1399,7 @@ def _spaghetti_grid(
             ax.spines["bottom"].set_linewidth(0.5)
             ax.tick_params(axis="both", length=3, width=0.5)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=(0.02, 0, 1, 1))
 
     fig.savefig(filename, dpi=300, bbox_inches="tight")
     return fig
@@ -2001,7 +2017,7 @@ def main():
         def _panel(ba, sl, cond, label, color, section):
             ba_c = ba[ba["cond"] == cond]
             sl_c = sl[sl["cond"] == cond]
-            return (f"{section}: {label}", ba_c, sl_c, color)
+            return (f"{section} {label}", ba_c, sl_c, color)
 
         orig_t = _panel(orig_block_acc, orig_slopes, "T", "T-match", "#1f5f8a", "Original")
         orig_p = _panel(orig_block_acc, orig_slopes, "P", "P-match", "#2d8a2d", "Original")
