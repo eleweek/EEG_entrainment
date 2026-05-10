@@ -1812,8 +1812,18 @@ def main():
     parser.add_argument(
         "--db",
         type=str,
-        default="study.db",
-        help="Path to SQLite database (default: study.db)"
+        default=None,
+        help="Path to SQLite database. Mutually exclusive with --from-export."
+    )
+    parser.add_argument(
+        "--from-export",
+        type=str,
+        default=None,
+        metavar="FILE",
+        help=(
+            "Path to replication accuracy CSV (produced by export_replication_data.py). "
+            "Slopes are recomputed using --fit-method. Mutually exclusive with --db."
+        ),
     )
     parser.add_argument(
         "--include-only-participants",
@@ -1856,54 +1866,69 @@ def main():
 
     args = parser.parse_args()
 
+    # Mutually exclusive data sources
+    if args.db is not None and args.from_export is not None:
+        parser.error("--db and --from-export are mutually exclusive")
+    if args.db is None and args.from_export is None:
+        parser.error("Must provide either --db or --from-export")
+
     # Parse participant filters
     include_only = parse_participant_list(args.include_only_participants)
     exclude = parse_participant_list(args.exclude_participants)
 
-    # Validate mutually exclusive options
     if include_only is not None and exclude is not None:
         parser.error("Cannot use both --include-only-participants and --exclude-participants")
 
-    # Load data
-    print(f"Loading trials from {args.db}...")
-    if include_only:
-        print(f"  Including only: {', '.join(include_only)}")
-    if exclude:
-        print(f"  Excluding: {', '.join(exclude)}")
+    if args.from_export is not None:
+        print(f"Loading exported accuracy data from {args.from_export}...")
+        block_acc = pd.read_csv(args.from_export)
 
-    df = load_trials(args.db, include_only=include_only, exclude=exclude)
+        if include_only is not None:
+            block_acc = block_acc[block_acc["participant_id"].isin(include_only)]
+        if exclude is not None:
+            block_acc = block_acc[~block_acc["participant_id"].isin(exclude)]
 
-    print(f"Loaded {df.shape[0]} trials from {df['participant_id'].nunique()} participants "
-          f"across {df['session_id'].nunique()} sessions")
+        if block_acc.empty:
+            print("No data loaded. Exiting.")
+            return
 
-    if df.empty:
-        print("No data loaded. Exiting.")
-        return
+        # CSV doesn't carry session_id; synthesize a stable one per (pid, day) so
+        # fit_slopes_per_session can group by it.
+        block_acc = block_acc.copy()
+        block_acc["session_id"] = (
+            block_acc["participant_id"] + "_d" + block_acc["day_index"].astype(str)
+        )
 
-    # Add day index
-    df = add_day_index(df)
+        print(f"Loaded {len(block_acc)} accuracy rows from {block_acc['participant_id'].nunique()} participants")
+        print(f"Fitting with method: {args.fit_method}")
+        slopes = fit_slopes_per_session(block_acc, method=args.fit_method)
+    else:
+        print(f"Loading trials from {args.db}...")
+        if include_only:
+            print(f"  Including only: {', '.join(include_only)}")
+        if exclude:
+            print(f"  Excluding: {', '.join(exclude)}")
 
-    # Compute block accuracies (scaled to 0-100%)
-    block_acc = (
-        df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
-        .mean()
-        .reset_index(name="accuracy")
-    )
-    block_acc["accuracy"] = block_acc["accuracy"] * 100
+        df = load_trials(args.db, include_only=include_only, exclude=exclude)
 
-    # Fit learning rates
-    print(f"Fitting with method: {args.fit_method}")
-    slopes = fit_slopes_per_session(block_acc, method=args.fit_method)
+        print(f"Loaded {df.shape[0]} trials from {df['participant_id'].nunique()} participants "
+              f"across {df['session_id'].nunique()} sessions")
 
-    # Export replication data to CSV
-    block_acc[["participant_id", "cond", "day_index", "block", "accuracy"]].sort_values(
-        ["participant_id", "day_index", "block"]
-    ).round(2).to_csv("replication_accuracy.csv", index=False)
-    slopes[["participant_id", "cond", "day_index", "a", "b", "r2"]].sort_values(
-        ["participant_id", "day_index"]
-    ).round(2).to_csv("replication_learning_rates.csv", index=False)
-    print(f"\nExported {len(block_acc)} rows to replication_accuracy.csv")
-    print(f"Exported {len(slopes)} rows to replication_learning_rates.csv")
+        if df.empty:
+            print("No data loaded. Exiting.")
+            return
+
+        df = add_day_index(df)
+
+        block_acc = (
+            df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
+            .mean()
+            .reset_index(name="accuracy")
+        )
+        block_acc["accuracy"] = block_acc["accuracy"] * 100
+
+        print(f"Fitting with method: {args.fit_method}")
+        slopes = fit_slopes_per_session(block_acc, method=args.fit_method)
 
     # Handle original paper data mode (after replication data loaded, so we can compare)
     if args.original_data_dir is not None:
