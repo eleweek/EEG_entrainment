@@ -387,7 +387,7 @@ def run_between_groups_test(
     )
     p_perm = float(perm_res.pvalue)
 
-    col_label = "intercept a" if column == "a" else "slope b"
+    col_label = {"a": "intercept a", "b": "slope b", "accuracy": "initial accuracy"}.get(column, column)
     test_type = "T ≠ P" if two_sided else "T > P"
     sided_label = "two-sided" if two_sided else "one-sided"
     print(f"\n=== {label}: Day-{day_index} between-groups on {col_label} ({test_type}) ===")
@@ -418,6 +418,29 @@ def run_h3_between_groups_day1_intercept(slopes: pd.DataFrame, n_perm: int = 100
 def run_h3_between_groups_day2_intercept(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0, two_sided: bool = False) -> None:
     """H3 (exploratory): Day-2 between-groups comparison on intercept a."""
     run_between_groups_test(slopes, day_index=2, column="a", label="H3 (exploratory)", n_perm=n_perm, seed=seed, two_sided=two_sided)
+
+
+def run_h3_between_groups_day1_initial_accuracy(
+    block_acc: pd.DataFrame,
+    n_perm: int = 10000,
+    seed: int = 0,
+    two_sided: bool = False,
+) -> None:
+    """H3 variant: Day-1 between-groups comparison on initial accuracy (block 1)."""
+    initial = (
+        block_acc[block_acc["block"] == 1]
+        [["participant_id", "day_index", "cond", "accuracy"]]
+        .copy()
+    )
+    run_between_groups_test(
+        initial,
+        day_index=1,
+        column="accuracy",
+        label="H3 initial accuracy (exploratory)",
+        n_perm=n_perm,
+        seed=seed,
+        two_sided=two_sided,
+    )
 
 
 def visualize_offset_vs_lr(slopes: pd.DataFrame) -> plt.Figure:
@@ -2252,6 +2275,7 @@ def main():
     run_h2_between_groups_day1(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=False)
     run_h3_between_groups_day1_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
     run_h3_between_groups_day2_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
+    run_h3_between_groups_day1_initial_accuracy(block_acc, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
 
     # Visualize
     visualize_learning_curves(block_acc, slopes)
