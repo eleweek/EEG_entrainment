@@ -755,8 +755,20 @@ def visualize_learning_curves(
             # Column 1: T-first Day 1
             plot_participant(axes[row_idx, 1], pid_t, 1, is_last_row)
 
-            axes[row_idx, 1].set_yticklabels([])
+        # Drop x-tick labels and the "Block" xlabel everywhere
+        for ax in axes.flat:
+            ax.set_xticklabels([])
+            ax.set_xlabel("")
+        # Y-tick labels only on the top-leftmost chart of each group
+        # (col 0 = P-match group, col 1 = T-match group)
+        for row_idx in range(n_rows):
+            for col_idx in range(2):
+                if row_idx != 0:
+                    axes[row_idx, col_idx].set_yticklabels([])
 
+        # Y-axis label only on the top-left chart
+        for ax in axes.flat:
+            ax.set_ylabel("")
         axes[0, 0].set_ylabel("Accuracy (%)", fontsize=8, color="#000000")
 
         fig.tight_layout(rect=(0, 0, 1, 0.95))
@@ -786,16 +798,24 @@ def visualize_learning_curves(
             plot_participant(axes[row_idx, 2], pid_t, 1, is_last_row)
             plot_participant(axes[row_idx, 3], pid_t, 2, is_last_row)
 
-            # Y tick labels only on leftmost of each group
+            # Y tick labels only on the top row of the leftmost column of each group
             for col_idx in range(4):
                 ax = axes[row_idx, col_idx]
-                if col_idx not in (0, 2):
+                if not (row_idx == 0 and col_idx in (0, 2)):
                     ax.set_yticklabels([])
 
-        # Adjust layout with gap between the two groups
+        # Drop x-tick labels and the "Block" xlabel everywhere — the inline
+        # participant caption already grounds each panel.
+        for ax in axes.flat:
+            ax.set_xticklabels([])
+            ax.set_xlabel("")
+
+        # Y-axis label only on the top-left chart
+        for ax in axes.flat:
+            ax.set_ylabel("")
         axes[0, 0].set_ylabel("Accuracy (%)", fontsize=8, color="#000000")
 
-        fig.tight_layout(rect=(0, 0, 0.98, 0.95))
+        fig.tight_layout(rect=(0, 0, 0.98, 0.90))
         fig.subplots_adjust(wspace=0.15, hspace=0.44)
         # Add extra space between columns 1 and 2 (between P-first and T-first)
         for row_idx in range(n_rows):
@@ -804,19 +824,19 @@ def visualize_learning_curves(
                 pos = ax.get_position()
                 ax.set_position([pos.x0 + 0.03, pos.y0, pos.width, pos.height])
 
-        # Add group headers at the top
-        fig.text(0.25, 0.975, "P-match first", ha="center", va="top",
-                 fontsize=13, fontweight="bold", color="#000000")
-        fig.text(0.75, 0.975, "T-match first", ha="center", va="top",
-                 fontsize=13, fontweight="bold", color="#000000")
-
-        # Add column headers (Day + condition) above each column
+        # Column headers just above each chart (subordinate to group headers)
         col_headers = ["Day 1, P-match", "Day 2, T-match", "Day 1, T-match", "Day 2, P-match"]
         for col_idx, header in enumerate(col_headers):
             ax = axes[0, col_idx]
             pos = ax.get_position()
-            fig.text(pos.x0 + pos.width / 2, pos.y1 + 0.04, header,
+            fig.text(pos.x0 + pos.width / 2, pos.y1 + 0.01, header,
                      ha="center", va="bottom", fontsize=11, color="#000000")
+
+        # Group headers above the column headers
+        fig.text(0.25, 0.95, "P-match first", ha="center", va="top",
+                 fontsize=13, fontweight="bold", color="#000000")
+        fig.text(0.75, 0.95, "T-match first", ha="center", va="top",
+                 fontsize=13, fontweight="bold", color="#000000")
 
     suffix = "_day1" if day1_only else ""
     _save(fig, f"learning_curves_per_participant{suffix}.png")
@@ -1567,6 +1587,19 @@ def visualize_original_individual_curves(
             pid = cond2_pids[idx] if idx < len(cond2_pids) else None
             plot_one(axes[row_idx, cols_per_group + col], pid, is_last, show_ylabel=(col == 0))
 
+    # Drop x-tick labels and the "Block" xlabel everywhere — inline caption grounds each panel
+    for ax in axes.flat:
+        ax.set_xticklabels([])
+        ax.set_xlabel("")
+    # Y-tick labels only on the top-leftmost chart of each group
+    for row_idx in range(n_rows):
+        for col_idx in range(n_cols):
+            if not (row_idx == 0 and col_idx in (0, cols_per_group)):
+                axes[row_idx, col_idx].set_yticklabels([])
+
+    # Y-axis label only on the top-left chart
+    for ax in axes.flat:
+        ax.set_ylabel("")
     axes[0, 0].set_ylabel("Accuracy (%)", fontsize=8, color="#000000")
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
@@ -1580,9 +1613,9 @@ def visualize_original_individual_curves(
             ax.set_position([pos.x0 + 0.01, pos.y0, pos.width, pos.height])
 
     # Column headers (centered over each group's columns)
-    fig.text(0.25, 0.965, cond_labels[cond1], ha="center", va="top",
+    fig.text(0.25, 0.99, cond_labels[cond1], ha="center", va="top",
              fontsize=12, fontweight="bold", color="#000000")
-    fig.text(0.75, 0.965, cond_labels[cond2], ha="center", va="top",
+    fig.text(0.75, 0.99, cond_labels[cond2], ha="center", va="top",
              fontsize=12, fontweight="bold", color="#000000")
 
     _save(fig, f"original learning rates {cond_labels[cond1]} vs {cond_labels[cond2]}.png")
