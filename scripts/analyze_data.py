@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
 import sqlite3
 from dataclasses import dataclass
 import pingouin as pg
@@ -13,6 +14,15 @@ from scipy.optimize import curve_fit
 from scipy import stats
 import statsmodels.api as sm
 from statsmodels.regression.quantile_regression import QuantReg
+
+
+OUTPUT_DIR = "_generated_charts"
+
+
+def _save(fig: plt.Figure, filename: str, dpi: int = 300) -> None:
+    """Save a figure into OUTPUT_DIR (created on first use)."""
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    fig.savefig(os.path.join(OUTPUT_DIR, filename), dpi=dpi, bbox_inches="tight")
 
 
 # -----------------------------
@@ -471,6 +481,7 @@ def visualize_offset_vs_lr(slopes: pd.DataFrame) -> plt.Figure:
     ax.spines["right"].set_visible(False)
 
     fig.tight_layout()
+    _save(fig, "offset_vs_lr.png")
     return fig
 
 
@@ -602,6 +613,8 @@ def visualize_group_average_both_days(
         ax.set_title(f"Group Average{title_suffix}", fontsize=10)
 
     fig.tight_layout()
+    suffix = "_filtered" if min_lr_1st_day is not None else ""
+    _save(fig, f"group_average_both_days{suffix}.png")
     return fig
 
 
@@ -784,6 +797,8 @@ def visualize_learning_curves(
             fig.text(pos.x0 + pos.width / 2, pos.y1 + 0.04, header,
                      ha="center", va="bottom", fontsize=11, color="#000000")
 
+    suffix = "_day1" if day1_only else ""
+    _save(fig, f"learning_curves_per_participant{suffix}.png")
     return fig
 
 
@@ -1106,7 +1121,7 @@ def visualize_lr_strip_plot(
                        first_gap=0.7 if compact else None)
 
     fig.tight_layout()
-    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    _save(fig, filename)
     return fig
 
 
@@ -1136,7 +1151,7 @@ def visualize_validation_strip_plot(
                        first_gap=0.7)
 
     fig.tight_layout()
-    fig.savefig("validation_strip_plot.png", dpi=300, bbox_inches="tight")
+    _save(fig, "validation_strip_plot.png")
     return fig
 
 
@@ -1157,7 +1172,7 @@ def visualize_day2_strip_plot(
                        x_label="Learning Rates by Group")
 
     fig.tight_layout()
-    fig.savefig("strip_plot_day2.png", dpi=300, bbox_inches="tight")
+    _save(fig, "strip_plot_day2.png")
     return fig
 
 
@@ -1243,7 +1258,7 @@ def visualize_initial_accuracy_strip_plot(
                        first_gap=0.7)
 
     fig.tight_layout()
-    fig.savefig("strip_plot_initial_accuracy.png", dpi=300, bbox_inches="tight")
+    _save(fig, "strip_plot_initial_accuracy.png")
     return fig
 
 
@@ -1311,7 +1326,7 @@ def visualize_leave_one_out(
     ax.tick_params(axis="both", length=3, width=0.5)
 
     fig.tight_layout()
-    fig.savefig("leave_one_out.png", dpi=300, bbox_inches="tight")
+    _save(fig, "leave_one_out.png")
     return fig
 
 
@@ -1401,7 +1416,7 @@ def _spaghetti_grid(
 
     fig.tight_layout(rect=(0.02, 0, 1, 1))
 
-    fig.savefig(filename, dpi=300, bbox_inches="tight")
+    _save(fig, filename)
     return fig
 
 
@@ -1547,7 +1562,7 @@ def visualize_original_individual_curves(
     fig.text(0.75, 0.965, cond_labels[cond2], ha="center", va="top",
              fontsize=12, fontweight="bold", color="#000000")
 
-    fig.savefig(f"original learning rates {cond_labels[cond1]} vs {cond_labels[cond2]}.png", dpi=150, bbox_inches="tight")
+    _save(fig, f"original learning rates {cond_labels[cond1]} vs {cond_labels[cond2]}.png")
     return fig
 
 
@@ -1785,6 +1800,8 @@ def visualize_original_aggregate(
         plot_aggregate(ax, block_acc, slopes, f"Original Paper Data: P-match vs T-match{title_suffix}", y_lim=y_lim, control_data_inner=ctrl_data_to_show, tn_data_inner=tn_data_to_show)
         fig.tight_layout()
 
+    filename = "original_vs_replication_aggregate.png" if (show_side_by_side and replication_data is not None) else "original_aggregate.png"
+    _save(fig, filename)
     return fig
 
 
