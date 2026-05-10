@@ -10,6 +10,7 @@ import pingouin as pg
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.ticker import PercentFormatter
 from scipy.optimize import curve_fit
 from scipy import stats
 import statsmodels.api as sm
@@ -31,6 +32,11 @@ def _fmt_lr(lr: float, digits: int = 2) -> str:
     if s == f"-{0.0:.{digits}f}":  # -0.0, -0.00, ...
         s = f"{0.0:.{digits}f}"
     return s
+
+
+def _accuracy_formatter() -> PercentFormatter:
+    """Formatter for axes that display accuracy values on a 0-100 scale."""
+    return PercentFormatter(xmax=100, decimals=0)
 
 
 # -----------------------------
@@ -627,8 +633,9 @@ def visualize_group_average_both_days(
     ax.tick_params(axis="x", length=3, width=0.5)
     ax.set_xlabel("Block", fontsize=9, color="black")
 
-    ax.set_ylabel("Accuracy (%)", fontsize=9, color="black")
+    ax.set_ylabel("Accuracy", fontsize=9, color="black")
     ax.tick_params(axis="y", colors="black", length=3, width=0.5)
+    ax.yaxis.set_major_formatter(_accuracy_formatter())
 
     if title_suffix:
         ax.set_title(f"Group Average{title_suffix}", fontsize=10)
@@ -769,7 +776,10 @@ def visualize_learning_curves(
         # Y-axis label only on the top-left chart
         for ax in axes.flat:
             ax.set_ylabel("")
-        axes[0, 0].set_ylabel("Accuracy (%)", fontsize=8, color="#000000")
+        axes[0, 0].set_ylabel("Accuracy", fontsize=8, color="#000000")
+        # Percent formatter on the axes that still show y-tick labels
+        for col_idx in (0, 1):
+            axes[0, col_idx].yaxis.set_major_formatter(_accuracy_formatter())
 
         fig.tight_layout(rect=(0, 0, 1, 0.95))
         fig.subplots_adjust(wspace=0.15, hspace=0.44)
@@ -813,7 +823,10 @@ def visualize_learning_curves(
         # Y-axis label only on the top-left chart
         for ax in axes.flat:
             ax.set_ylabel("")
-        axes[0, 0].set_ylabel("Accuracy (%)", fontsize=8, color="#000000")
+        axes[0, 0].set_ylabel("Accuracy", fontsize=8, color="#000000")
+        # Percent formatter on the axes that still show y-tick labels
+        for col_idx in (0, 2):
+            axes[0, col_idx].yaxis.set_major_formatter(_accuracy_formatter())
 
         fig.tight_layout(rect=(0, 0, 0.98, 0.90))
         fig.subplots_adjust(wspace=0.15, hspace=0.44)
@@ -1295,8 +1308,9 @@ def visualize_initial_accuracy_strip_plot(
     fig, ax = plt.subplots(figsize=(10, 6))
     _render_strip_plot(ax, groups_info,
                        section_labels=section_labels,
-                       x_label="Accuracy (%)",
+                       x_label="Accuracy",
                        first_gap=0.7)
+    ax.xaxis.set_major_formatter(_accuracy_formatter())
 
     fig.tight_layout()
     _save(fig, "strip_plot_initial_accuracy.png")
@@ -1443,13 +1457,15 @@ def _spaghetti_grid(
             ax.set_xticks(range(1, 9))
             if r == 0 and c == 0:
                 ax.set_xlabel("Block", fontsize=9)
-                ax.set_ylabel("Accuracy (%)", fontsize=9, labelpad=8)
+                ax.set_ylabel("Accuracy", fontsize=9, labelpad=8)
             elif r == n_rows - 1 and c == 0:
                 pass
             else:
                 ax.set_xticklabels([])
                 if c != 0:
                     ax.set_yticklabels([])
+            if c == 0:
+                ax.yaxis.set_major_formatter(_accuracy_formatter())
 
             ax.spines["top"].set_visible(False)
             ax.spines["right"].set_visible(False)
@@ -1600,7 +1616,10 @@ def visualize_original_individual_curves(
     # Y-axis label only on the top-left chart
     for ax in axes.flat:
         ax.set_ylabel("")
-    axes[0, 0].set_ylabel("Accuracy (%)", fontsize=8, color="#000000")
+    axes[0, 0].set_ylabel("Accuracy", fontsize=8, color="#000000")
+    # Percent formatter on the axes that still show y-tick labels
+    for col_idx in (0, cols_per_group):
+        axes[0, col_idx].yaxis.set_major_formatter(_accuracy_formatter())
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.subplots_adjust(wspace=0.2, hspace=0.4)
@@ -1777,7 +1796,8 @@ def visualize_original_aggregate(
             ax.set_xticklabels([])
 
         if show_y_axis:
-            ax.set_ylabel("Accuracy (%)", fontsize=10, color="black")
+            ax.set_ylabel("Accuracy", fontsize=10, color="black")
+            ax.yaxis.set_major_formatter(_accuracy_formatter())
         else:
             ax.set_ylabel("")
             ax.set_yticklabels([])
