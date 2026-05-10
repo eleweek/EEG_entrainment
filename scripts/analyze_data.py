@@ -25,6 +25,14 @@ def _save(fig: plt.Figure, filename: str, dpi: int = 300) -> None:
     fig.savefig(os.path.join(OUTPUT_DIR, filename), dpi=dpi, bbox_inches="tight")
 
 
+def _fmt_lr(lr: float, digits: int = 2) -> str:
+    """Format a learning rate, collapsing tiny negatives so '-0.0' never appears."""
+    s = f"{lr:.{digits}f}"
+    if s == f"-{0.0:.{digits}f}":  # -0.0, -0.00, ...
+        s = f"{0.0:.{digits}f}"
+    return s
+
+
 # -----------------------------
 # Model: accuracy = a + b*log(block)
 # -----------------------------
@@ -527,12 +535,12 @@ def visualize_group_average_both_days(
 
     fig, ax = plt.subplots(figsize=(10, 5))
 
-    # Colors: T-first = blue, P-first = green; Day 1 = dark, Day 2 = light
+    # Colors: T-first = blue, P-first = green; Day 1 = dark, Day 2 = a bit lighter
     colors = {
         ("P", 1): "#2d8a2d",  # P-first, Day 1 (dark green)
-        ("P", 2): "#7dca7d",  # P-first, Day 2 (light green)
+        ("P", 2): "#6cc16c",  # P-first, Day 2 (slightly lighter green)
         ("T", 1): "#1f5f8a",  # T-first, Day 1 (dark blue)
-        ("T", 2): "#6fb3d9",  # T-first, Day 2 (light blue)
+        ("T", 2): "#5a9bc9",  # T-first, Day 2 (slightly lighter blue)
     }
 
     # Store endpoints for direct labeling
@@ -577,17 +585,30 @@ def visualize_group_average_both_days(
         ("P", 1): "P-match",
         ("P", 2): "P→T-match",
     }
+    # Right-edge of each label aligns with the rightmost edge of the dot at the
+    # endpoint, not its center. dot_size=20 in scatter -> radius ~= sqrt(20/pi) pts.
+    from matplotlib.transforms import offset_copy
+    dot_radius_pts = float(np.sqrt(20 / np.pi))
+    label_trans = offset_copy(ax.transData, fig=fig, x=dot_radius_pts, units="points")
+
     for (group, day), (x, y, lr) in endpoints.items():
         color = colors[(group, day)]
         # T-first: label above (positive offset), P-first: label below (negative offset)
         y_offset = 2 if group == "T" else -2
         va = "bottom" if group == "T" else "top"
-        ax.text(x - 3.5, y + y_offset, f"{label_names[(group, day)]}  LR={lr:.1f}",
-                color=color, fontsize=8, va=va, ha="center")
+        ax.text(x, y + y_offset, f"{label_names[(group, day)]}  LR={_fmt_lr(lr)}",
+                color=color, fontsize=9, va=va, ha="right",
+                transform=label_trans)
 
     # Minimal day separator (at boundary between Day 1 and Day 2)
     n_blocks = 8
     ax.axvline(x=n_blocks + 0.5, color="#dddddd", linewidth=0.5, zorder=0)
+
+    # Day-section headers, inline at top-left of each half (spaghetti-style)
+    ax.text(1, 1, "Day 1", transform=ax.get_xaxis_transform(),
+            ha="left", va="top", fontsize=11, fontweight="bold", color="black")
+    ax.text(n_blocks + 1, 1, "Day 2", transform=ax.get_xaxis_transform(),
+            ha="left", va="top", fontsize=11, fontweight="bold", color="black")
 
     # Tufte-style axis
     ax.spines["top"].set_visible(False)
@@ -1702,7 +1723,7 @@ def visualize_original_aggregate(
                 # P-match: position below the curve
                 y_offset = -2.0
                 va = "top"
-            ax.text(x - 0.5, y + y_offset, f"{labels[cond]}  LR={lr:.1f}",
+            ax.text(x - 0.5, y + y_offset, f"{labels[cond]}  LR={_fmt_lr(lr)}",
                     color=color, fontsize=9, va=va, ha="center")
 
         # Tufte-style axis
@@ -2173,13 +2194,6 @@ def main():
         print(f"\nP-match (filtered LR≥-1): Replication (n={len(rep_p_filtered_lr)}, mean={rep_p_filtered_lr.mean():.3f}) vs Original (n={len(orig_p_filtered_lr)}, mean={orig_p_filtered_lr.mean():.3f})")
         print(f"  t({pf_result.df:.1f}) = {pf_result.statistic:.3f}, p = {pf_result.pvalue:.4f}")
 
-        plt.show()
-        return
-
-    # Print fitted slopes
-    print("\n=== Fitted slopes ===")
-    print(slopes.sort_values(["participant_id", "day_index", "cond"]).to_string(index=False))
-
     # Run hypothesis tests
     run_h1_within_subject(slopes)
     run_h2_between_groups_day1(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=False)
@@ -2191,7 +2205,6 @@ def main():
     visualize_learning_curves(block_acc, slopes, day1_only=True)  # Day 1 only comparison
     visualize_offset_vs_lr(slopes)
     visualize_group_average_both_days(block_acc, slopes)
-    visualize_group_average_both_days(block_acc, slopes, min_lr_1st_day=0)  # Exclude negative day 1 LRs
     plt.show()
 
 
