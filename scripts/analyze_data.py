@@ -216,10 +216,27 @@ def add_day_index(df_trials: pd.DataFrame) -> pd.DataFrame:
 
 
 def fit_slopes_per_session(block_acc: pd.DataFrame, method: str = "ols") -> pd.DataFrame:
-    rows = []
+    """Fit one log-linear curve per (participant_id, day_index).
 
-    for (pid, sid, day), sub in block_acc.groupby(["participant_id", "session_id", "day_index"], sort=True):
+    Assumes a single session per (participant, day). If `session_id` is
+    present, raises ValueError when that assumption is violated.
+    """
+    rows = []
+    has_session_id = "session_id" in block_acc.columns
+
+    for (pid, day), sub in block_acc.groupby(["participant_id", "day_index"], sort=True):
         sub = sub.sort_values("block")
+
+        if has_session_id:
+            unique_sids = sub["session_id"].unique()
+            if len(unique_sids) != 1:
+                raise ValueError(
+                    f"Expected exactly one session_id for (participant_id={pid!r}, "
+                    f"day_index={day}), got {len(unique_sids)}: {list(unique_sids)}"
+                )
+            sid = unique_sids[0]
+        else:
+            sid = None
 
         # condition is constant within the session/day
         cond = sub["cond"].iloc[0]
@@ -658,6 +675,63 @@ def parse_participant_list(value: str | None) -> list[str] | None:
     if value is None or value.strip() == "":
         return None
     return [p.strip() for p in value.split(",") if p.strip()]
+
+
+def load_replication_data(
+    db_path: str | None,
+    from_export_path: str | None,
+    include_only: list[str] | None = None,
+    exclude: list[str] | None = None,
+    fit_method: str = "ols",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Load replication block accuracy + per-session log-linear fits.
+
+    Source is either an exported accuracy CSV (from_export_path) or the SQLite
+    study DB (db_path). Exactly one must be provided. Raises ValueError if
+    the source resolves to zero rows after any include/exclude filtering.
+    """
+    if (db_path is None) == (from_export_path is None):
+        raise ValueError("Provide exactly one of db_path or from_export_path")
+
+    if from_export_path is not None:
+        print(f"Loading exported accuracy data from {from_export_path}...")
+        block_acc = pd.read_csv(from_export_path)
+
+        if include_only is not None:
+            block_acc = block_acc[block_acc["participant_id"].isin(include_only)]
+        if exclude is not None:
+            block_acc = block_acc[~block_acc["participant_id"].isin(exclude)]
+
+        if block_acc.empty:
+            raise ValueError(f"No accuracy rows in {from_export_path} after filtering")
+
+        print(f"Loaded {len(block_acc)} accuracy rows from {block_acc['participant_id'].nunique()} participants")
+    else:
+        print(f"Loading trials from {db_path}...")
+        if include_only:
+            print(f"  Including only: {', '.join(include_only)}")
+        if exclude:
+            print(f"  Excluding: {', '.join(exclude)}")
+
+        df = load_trials(db_path, include_only=include_only, exclude=exclude)
+        print(f"Loaded {df.shape[0]} trials from {df['participant_id'].nunique()} participants "
+              f"across {df['session_id'].nunique()} sessions")
+
+        if df.empty:
+            raise ValueError(f"No trials in {db_path} after filtering")
+
+        df = add_day_index(df)
+        block_acc = (
+            df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
+            .mean()
+            .reset_index(name="accuracy")
+        )
+        block_acc["accuracy"] = block_acc["accuracy"] * 100
+
+    print(f"Fitting with method: {fit_method}")
+    slopes = fit_slopes_per_session(block_acc, method=fit_method)
+    return block_acc, slopes
 
 
 # -----------------------------
@@ -1799,56 +1873,13 @@ def main():
     if include_only is not None and exclude is not None:
         parser.error("Cannot use both --include-only-participants and --exclude-participants")
 
-    if args.from_export is not None:
-        print(f"Loading exported accuracy data from {args.from_export}...")
-        block_acc = pd.read_csv(args.from_export)
-
-        if include_only is not None:
-            block_acc = block_acc[block_acc["participant_id"].isin(include_only)]
-        if exclude is not None:
-            block_acc = block_acc[~block_acc["participant_id"].isin(exclude)]
-
-        if block_acc.empty:
-            print("No data loaded. Exiting.")
-            return
-
-        # CSV doesn't carry session_id; synthesize a stable one per (pid, day) so
-        # fit_slopes_per_session can group by it.
-        block_acc = block_acc.copy()
-        block_acc["session_id"] = (
-            block_acc["participant_id"] + "_d" + block_acc["day_index"].astype(str)
-        )
-
-        print(f"Loaded {len(block_acc)} accuracy rows from {block_acc['participant_id'].nunique()} participants")
-        print(f"Fitting with method: {args.fit_method}")
-        slopes = fit_slopes_per_session(block_acc, method=args.fit_method)
-    else:
-        print(f"Loading trials from {args.db}...")
-        if include_only:
-            print(f"  Including only: {', '.join(include_only)}")
-        if exclude:
-            print(f"  Excluding: {', '.join(exclude)}")
-
-        df = load_trials(args.db, include_only=include_only, exclude=exclude)
-
-        print(f"Loaded {df.shape[0]} trials from {df['participant_id'].nunique()} participants "
-              f"across {df['session_id'].nunique()} sessions")
-
-        if df.empty:
-            print("No data loaded. Exiting.")
-            return
-
-        df = add_day_index(df)
-
-        block_acc = (
-            df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
-            .mean()
-            .reset_index(name="accuracy")
-        )
-        block_acc["accuracy"] = block_acc["accuracy"] * 100
-
-        print(f"Fitting with method: {args.fit_method}")
-        slopes = fit_slopes_per_session(block_acc, method=args.fit_method)
+    block_acc, slopes = load_replication_data(
+        db_path=args.db,
+        from_export_path=args.from_export,
+        include_only=include_only,
+        exclude=exclude,
+        fit_method=args.fit_method,
+    )
 
     # Handle original paper data mode (after replication data loaded, so we can compare)
     if args.original_data_dir is not None:
