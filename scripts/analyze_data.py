@@ -634,7 +634,7 @@ def visualize_group_average_both_days(
     ax.axvline(x=n_blocks + 0.5, color="#dddddd", linewidth=0.5, zorder=0)
 
     # Day-section headers, inline at top-left of each half (spaghetti-style)
-    ax.text(1, 1, "Day 1", transform=ax.get_xaxis_transform(),
+    ax.text(1, 1, "Replication, Day 1", transform=ax.get_xaxis_transform(),
             ha="left", va="top", fontsize=11, fontweight="bold", color="black")
     ax.text(n_blocks + 1, 1, "Day 2", transform=ax.get_xaxis_transform(),
             ha="left", va="top", fontsize=11, fontweight="bold", color="black")
