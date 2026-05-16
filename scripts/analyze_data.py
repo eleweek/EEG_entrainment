@@ -443,85 +443,6 @@ def run_h3_between_groups_day1_initial_accuracy(
     )
 
 
-def visualize_offset_vs_lr(slopes: pd.DataFrame) -> plt.Figure:
-    """
-    Scatter plot of offset (a) vs learning rate (b).
-
-    - X = offset, Y = LR
-    - Each participant's two points (Day 1, Day 2) are connected by an arrow
-    - P-match = blue, T-match = red (by condition, not group)
-    - Day 1 = dark shade, Day 2 = light shade
-    """
-    fig, ax = plt.subplots(figsize=(8, 6))
-
-    # Colors by condition: P-match = blue, T-match = red
-    # Day 1 = dark, Day 2 = light
-    cond_colors = {
-        ("P", 1): "#1f77b4",  # P-match, Day 1 (dark blue)
-        ("P", 2): "#7fbfff",  # P-match, Day 2 (light blue)
-        ("T", 1): "#d62728",  # T-match, Day 1 (dark red)
-        ("T", 2): "#ff9896",  # T-match, Day 2 (light red)
-    }
-
-    # Plot each participant
-    for pid in slopes["participant_id"].unique():
-        p_data = slopes[slopes["participant_id"] == pid].sort_values("day_index")
-
-        if len(p_data) == 2:
-            # Draw arrow from Day 1 to Day 2
-            d1 = p_data[p_data["day_index"] == 1].iloc[0]
-            d2 = p_data[p_data["day_index"] == 2].iloc[0]
-            ax.annotate(
-                "",
-                xy=(d2["a"], d2["b"]),  # arrow head (Day 2)
-                xytext=(d1["a"], d1["b"]),  # arrow tail (Day 1)
-                arrowprops=dict(
-                    arrowstyle="->",
-                    color="#cccccc",
-                    lw=0.8,
-                    shrinkA=4,  # shrink from tail (don't overlap dot)
-                    shrinkB=4,  # shrink from head (don't overlap dot)
-                ),
-                zorder=1,
-            )
-
-        # Plot each day's point (color by condition, not group)
-        for _, row in p_data.iterrows():
-            day = int(row["day_index"])
-            cond = row["cond"]  # T or P (the condition on THIS day)
-            color = cond_colors.get((cond, day), "#888888")
-            ax.scatter(
-                row["a"],
-                row["b"],
-                c=color,
-                s=50,
-                zorder=2,
-                edgecolors="white",
-                linewidths=0.5,
-            )
-
-    # Legend
-    legend_elements = [
-        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#1f77b4", markersize=10, label="P-match Day 1"),
-        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#7fbfff", markersize=10, label="P-match Day 2"),
-        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#d62728", markersize=10, label="T-match Day 1"),
-        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#ff9896", markersize=10, label="T-match Day 2"),
-    ]
-    ax.legend(handles=legend_elements, loc="upper right", frameon=False)
-
-    ax.set_xlabel("Offset (a)", fontsize=11)
-    ax.set_ylabel("Learning Rate (b)", fontsize=11)
-    ax.set_title("Offset vs Learning Rate by Participant", fontsize=12)
-
-    # Clean up spines
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-
-    fig.tight_layout()
-    _save(fig, "offset_vs_lr.png")
-    return fig
-
-
 def visualize_learning_curves(
     block_acc: pd.DataFrame,
     slopes: pd.DataFrame,
@@ -2130,10 +2051,8 @@ def main():
     run_h3_between_groups_day2_intercept(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
     run_h3_between_groups_day1_initial_accuracy(block_acc, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
 
-    # Visualize
     visualize_learning_curves(block_acc, slopes)
     visualize_learning_curves(block_acc, slopes, day1_only=True)  # Day 1 only comparison
-    visualize_offset_vs_lr(slopes)
     plt.show()
 
 
