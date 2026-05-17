@@ -2044,10 +2044,7 @@ def main():
     # Day 2 strip plot (original study, second session)
     print("\nGenerating Day 2 strip plot...")
     day2_slopes = load_original_paper_provided_learning_rates(".", filename="groupLR_postLMM.csv")
-    if day2_slopes is not None:
-        visualize_day2_strip_plot(day2_slopes)
-    else:
-        print("  groupLR_postLMM.csv not found, skipping day 2 strip plot")
+    visualize_day2_strip_plot(day2_slopes)
 
     # Initial accuracy strip plot
     print("\nGenerating initial accuracy strip plot...")
