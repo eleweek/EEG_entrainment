@@ -31,6 +31,9 @@ def _save(fig: plt.Figure, filename: str, dpi: int = 450) -> None:
     with plt.rc_context({"svg.fonttype": "none"}):
         fig.savefig(svg_path, format="svg", bbox_inches="tight")
 
+    webp_path = os.path.join(OUTPUT_DIR, f"{stem}.webp")
+    fig.savefig(webp_path, format="webp", dpi=dpi, bbox_inches="tight")
+
 
 def _fmt_lr(lr: float, digits: int = 2) -> str:
     """Format a learning rate, collapsing tiny negatives so '-0.0' never appears."""
@@ -1363,7 +1366,12 @@ def _spaghetti_grid(
     n_rows = len(grid)
     n_cols = max(len(row) for row in grid)
 
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows), squeeze=False)
+    panel_size = 4
+    fig, axes = plt.subplots(
+        n_rows, n_cols,
+        figsize=(panel_size * n_cols, panel_size * n_rows),
+        squeeze=False,
+    )
 
     # Global y range across all panels
     all_acc_parts = []
@@ -1419,6 +1427,7 @@ def _spaghetti_grid(
             ax.set_xlim(0.5, 8.5)
             ax.set_ylim(y_min, y_max)
             ax.set_xticks(range(1, 9))
+            ax.set_box_aspect(1)
             if r == 0 and c == 0:
                 ax.set_xlabel("Block", fontsize=9)
                 ax.set_ylabel("Accuracy", fontsize=9, labelpad=8)
