@@ -1,8 +1,11 @@
 """
 Export replication study per-block accuracy to CSV.
 
-Reads the SQLite study DB and writes one row per (participant, session, block):
+Reads the SQLite study DB and writes one row per (public participant, session, block):
   participant_id, cond, day_index, block, accuracy
+
+The exported participant_id values are public scrambled IDs from the
+participant_public_id_mapping table. Internal participant IDs are not exported.
 
 Learning rates are not exported -- they are recomputed by analyze_data.py
 
@@ -13,12 +16,38 @@ from __future__ import annotations
 
 import argparse
 import os
+import sqlite3
 
 from analyze_data import (
     add_day_index,
     load_trials,
     parse_participant_list,
 )
+
+
+PUBLIC_ID_TABLE = "participant_public_id_mapping"
+
+
+def load_public_id_mapping(db_path: str) -> dict[str, str]:
+    with sqlite3.connect(db_path) as conn:
+        table_exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (PUBLIC_ID_TABLE,),
+        ).fetchone()
+        if table_exists is None:
+            raise RuntimeError(
+                f"Missing {PUBLIC_ID_TABLE!r} table in {db_path}. "
+                "Run scripts/create_public_participant_ids.py first."
+            )
+
+        rows = conn.execute(
+            f"""
+            SELECT participant_id, public_participant_id
+            FROM {PUBLIC_ID_TABLE}
+            """
+        ).fetchall()
+
+    return {participant_id: public_id for participant_id, public_id in rows}
 
 
 def main():
@@ -75,6 +104,17 @@ def main():
         .reset_index(name="accuracy")
     )
     block_acc["accuracy"] = block_acc["accuracy"] * 100
+
+    public_id_mapping = load_public_id_mapping(args.db)
+    missing_mapping = sorted(set(block_acc["participant_id"]) - set(public_id_mapping))
+    if missing_mapping:
+        raise RuntimeError(
+            "Missing public participant IDs for: "
+            + ", ".join(missing_mapping)
+            + f". Recreate or repair {PUBLIC_ID_TABLE!r}."
+        )
+
+    block_acc["participant_id"] = block_acc["participant_id"].map(public_id_mapping)
 
     out_dir = os.path.dirname(args.output)
     if out_dir:
