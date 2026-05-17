@@ -711,7 +711,7 @@ def visualize_learning_curves(
             x_fit = np.linspace(1, n_blocks, 100)
             y_fit = log_linear(x_fit, a, b)
             ax.plot(x_fit, y_fit, color=fit_color, linewidth=1, zorder=2)
-            fit_annotation = f"   LR={b:.2f}   off={a:.2f}   R²={r2:.2f}"
+            fit_annotation = f"LR={b:.2f}   off={a:.2f}   R²={r2:.2f}"
 
         # Tufte-style: remove spines, keep only left and bottom
         ax.spines["top"].set_visible(False)
@@ -1187,7 +1187,7 @@ def visualize_lr_strip_plot(
         filename = "strip_plot.png"
 
     _render_strip_plot(ax, groups_info,
-                       section_labels={0: "Original Study", 1: "Replication, Day 1"},
+                       section_labels={0: "Original Study, Day 1", 1: "Replication, Day 1"},
                        x_label="Learning Rates by Group",
                        first_gap=0.7 if compact else None)
 
@@ -1661,7 +1661,7 @@ def visualize_original_individual_curves(
             x_fit = np.linspace(1, 8, 100)
             y_fit = log_linear(x_fit, a, b)
             ax.plot(x_fit, y_fit, color=fit_color, linewidth=1, zorder=2)
-            fit_annotation = f"LR={b:.2f}   off={a:.2f}   R²={r2:.2f}"
+            fit_annotation = f"LR={b:.2f}  off={a:.2f}  R²={r2:.2f}"
 
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
