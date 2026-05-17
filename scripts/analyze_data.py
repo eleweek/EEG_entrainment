@@ -546,6 +546,8 @@ def visualize_replication_aggregate_both_days(
         ("T", 2): "#5a9bc9",  # T-first, Day 2 (slightly lighter blue)
     }
 
+    dot_size = 9
+
     # Store endpoints for direct labeling
     endpoints = {}
 
@@ -566,7 +568,7 @@ def visualize_replication_aggregate_both_days(
             color = colors[(group, day)]
 
             # Plot dots - small, unobtrusive
-            ax.scatter(blocks_plot, acc, c=color, s=16, zorder=3)
+            ax.scatter(blocks_plot, acc, c=color, s=dot_size, zorder=3)
 
             # Fit log-linear curve
             min_b = blocks_original.min()
@@ -575,7 +577,7 @@ def visualize_replication_aggregate_both_days(
             x_fit_original = np.linspace(min_b, max_b, 100)
             x_fit_plot = x_fit_original + (max_block if day == 2 else 0)
             y_fit = log_linear(x_fit_original, fit.a, fit.b)
-            ax.plot(x_fit_plot, y_fit, color=color, linewidth=1.2, zorder=2)
+            ax.plot(x_fit_plot, y_fit, color=color, linewidth=1.0, zorder=2)
 
             # Store endpoint for direct labeling
             endpoints[(group, day)] = (x_fit_plot[-1], y_fit[-1], fit.b)
@@ -589,9 +591,9 @@ def visualize_replication_aggregate_both_days(
         ("P", 2): "P→T-match",
     }
     # Right-edge of each label aligns with the rightmost edge of the dot at the
-    # endpoint, not its center. dot_size=16 in scatter -> radius ~= sqrt(16/pi) pts.
+    # endpoint, not its center.
     from matplotlib.transforms import offset_copy
-    dot_radius_pts = float(np.sqrt(16 / np.pi))
+    dot_radius_pts = float(np.sqrt(dot_size / np.pi))
     label_trans = offset_copy(ax.transData, fig=fig, x=dot_radius_pts, units="points")
 
     for (group, day), (x, y, lr) in endpoints.items():
@@ -714,7 +716,7 @@ def visualize_learning_curves(
             x_fit = np.linspace(1, n_blocks, 100)
             y_fit = log_linear(x_fit, a, b)
             ax.plot(x_fit, y_fit, color=fit_color, linewidth=1, zorder=2)
-            fit_annotation = f"LR={b:.2f}   off={a:.2f}   R²={r2:.2f}"
+            fit_annotation = f"  LR={b:.2f}  off={a:.2f}  R²={r2:.2f}"
 
         # Tufte-style: remove spines, keep only left and bottom
         ax.spines["top"].set_visible(False)
@@ -1500,7 +1502,8 @@ def _spaghetti_grid(
             ax.spines["bottom"].set_linewidth(0.5)
             ax.tick_params(axis="both", length=3, width=0.5)
 
-    fig.tight_layout(rect=(0.02, 0, 1, 1))
+    fig.tight_layout(rect=(0.025, 0, 1, 1), pad=0.15)
+    fig.subplots_adjust(wspace=0.08, hspace=0.12)
 
     _save(fig, filename)
     return fig
@@ -1773,6 +1776,7 @@ def visualize_original_vs_replication_aggregate(
         "P": "P-match",
         "T": "T-match",
     }
+    dot_size = 9
 
     def participants_per_group_label(slopes_data: pd.DataFrame) -> str:
         counts = slopes_data.groupby("cond")["participant_id"].nunique()
@@ -1804,20 +1808,20 @@ def visualize_original_vs_replication_aggregate(
             color = colors[cond]
 
             # Plot dots
-            ax.scatter(blocks, acc, c=color, s=18, zorder=3)
+            ax.scatter(blocks, acc, c=color, s=dot_size, zorder=3)
 
             # Fit and plot curve
             fit = fit_learning_rate(blocks, acc, method="ols")
             x_fit = np.linspace(1, 8, 100)
             y_fit = log_linear(x_fit, fit.a, fit.b)
-            ax.plot(x_fit, y_fit, color=color, linewidth=1.5, zorder=2)
+            ax.plot(x_fit, y_fit, color=color, linewidth=1.0, zorder=2)
 
             endpoints[cond] = (x_fit[-1], y_fit[-1], fit.b)
 
         # Direct labeling: T-match on top, P-match on bottom. Right edge aligns
         # with the rightmost edge of the final dot at block 8.
         from matplotlib.transforms import offset_copy
-        dot_radius_pts = float(np.sqrt(18 / np.pi))
+        dot_radius_pts = float(np.sqrt(dot_size / np.pi))
         label_trans = offset_copy(ax.transData, fig=fig, x=dot_radius_pts, units="points")
         for cond, (x, y, lr) in endpoints.items():
             color = colors[cond]
