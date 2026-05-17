@@ -1477,6 +1477,78 @@ def _spaghetti_grid(
     return fig
 
 
+_SPAGHETTI_COND_STYLE = {
+    "T":  ("T-match",            "#1f5f8a"),
+    "P":  ("P-match",            "#2d8a2d"),
+    "TN": ("T-nonMatch",         "#9370DB"),
+    "C":  ("Arrhythmic Control", "#666666"),
+}
+
+
+def _spaghetti_panel(
+    block_acc: pd.DataFrame,
+    slopes: pd.DataFrame,
+    cond: str,
+    section: str,
+) -> tuple[str, pd.DataFrame, pd.DataFrame, str]:
+    """Build one (title, block_acc, slopes, color) panel for a given condition."""
+    label, color = _SPAGHETTI_COND_STYLE[cond]
+    return (
+        f"{section} {label}",
+        block_acc[block_acc["cond"] == cond],
+        slopes[slopes["cond"] == cond],
+        color,
+    )
+
+
+def visualize_spaghetti_all(
+    original_data: tuple[pd.DataFrame, pd.DataFrame],
+    tn_data: tuple[pd.DataFrame, pd.DataFrame],
+    control_data: tuple[pd.DataFrame, pd.DataFrame],
+    replication_day1_data: tuple[pd.DataFrame, pd.DataFrame],
+) -> plt.Figure:
+    """Spaghetti grid: original P/T/TN/C on top, replication P/T on bottom."""
+    orig_ba, orig_sl = original_data
+    tn_ba, tn_sl = tn_data
+    ctrl_ba, ctrl_sl = control_data
+    rep_ba, rep_sl = replication_day1_data
+
+    return _spaghetti_grid([
+        [
+            _spaghetti_panel(orig_ba, orig_sl, "T", "Original"),
+            _spaghetti_panel(orig_ba, orig_sl, "P", "Original"),
+            _spaghetti_panel(tn_ba, tn_sl, "TN", "Original"),
+            _spaghetti_panel(ctrl_ba, ctrl_sl, "C", "Original"),
+        ],
+        [
+            _spaghetti_panel(rep_ba, rep_sl, "T", "Replication"),
+            _spaghetti_panel(rep_ba, rep_sl, "P", "Replication"),
+            None,
+            None,
+        ],
+    ], "spaghetti_all.png")
+
+
+def visualize_spaghetti_PT_comparison(
+    original_data: tuple[pd.DataFrame, pd.DataFrame],
+    replication_day1_data: tuple[pd.DataFrame, pd.DataFrame],
+) -> plt.Figure:
+    """Spaghetti grid: P-match and T-match side-by-side, original vs replication."""
+    orig_ba, orig_sl = original_data
+    rep_ba, rep_sl = replication_day1_data
+
+    return _spaghetti_grid([
+        [
+            _spaghetti_panel(orig_ba, orig_sl, "T", "Original"),
+            _spaghetti_panel(rep_ba, rep_sl, "T", "Replication"),
+        ],
+        [
+            _spaghetti_panel(orig_ba, orig_sl, "P", "Original"),
+            _spaghetti_panel(rep_ba, rep_sl, "P", "Replication"),
+        ],
+    ], "spaghetti_PT_comparison.png")
+
+
 def visualize_original_individual_curves(
     block_acc: pd.DataFrame,
     slopes: pd.DataFrame,
@@ -1989,33 +2061,20 @@ def main():
 
     # Spaghetti plots: individual learning curves overlaid per group
     print("\nGenerating spaghetti plots...")
-    rep_day1_block_acc = block_acc[block_acc["day_index"] == 1]
-    rep_day1_slopes_all = slopes[slopes["day_index"] == 1]
-
-    # Helper to extract (title, block_acc, slopes, color) for a condition
-    def _panel(ba, sl, cond, label, color, section):
-        ba_c = ba[ba["cond"] == cond]
-        sl_c = sl[sl["cond"] == cond]
-        return (f"{section} {label}", ba_c, sl_c, color)
-
-    orig_t = _panel(orig_block_acc, orig_slopes, "T", "T-match", "#1f5f8a", "Original")
-    orig_p = _panel(orig_block_acc, orig_slopes, "P", "P-match", "#2d8a2d", "Original")
-    orig_tn = _panel(tn_block_acc, tn_slopes, "TN", "T-nonMatch", "#9370DB", "Original")
-    orig_c = _panel(control_block_acc, control_slopes, "C", "Arrhythmic Control", "#666666", "Original")
-    rep_t = _panel(rep_day1_block_acc, rep_day1_slopes_all, "T", "T-match", "#1f5f8a", "Replication")
-    rep_p = _panel(rep_day1_block_acc, rep_day1_slopes_all, "P", "P-match", "#2d8a2d", "Replication")
-
-    # Plot 1: all groups (4 orig on top, 2 rep on bottom)
-    _spaghetti_grid([
-        [orig_t, orig_p, orig_tn, orig_c],
-        [rep_t, rep_p, None, None],
-    ], "spaghetti_all.png")
-
-    # Plot 2: T-match and P-match comparison (2x2)
-    _spaghetti_grid([
-        [orig_t, rep_t],
-        [orig_p, rep_p],
-    ], "spaghetti_comparison.png")
+    rep_day1_data = (
+        block_acc[block_acc["day_index"] == 1],
+        slopes[slopes["day_index"] == 1],
+    )
+    visualize_spaghetti_all(
+        original_data=(orig_block_acc, orig_slopes),
+        tn_data=(tn_block_acc, tn_slopes),
+        control_data=(control_block_acc, control_slopes),
+        replication_day1_data=rep_day1_data,
+    )
+    visualize_spaghetti_PT_comparison(
+        original_data=(orig_block_acc, orig_slopes),
+        replication_day1_data=rep_day1_data,
+    )
 
     # Leave-one-out sensitivity plot (original provided learning rates)
     print("\nGenerating leave-one-out sensitivity plot...")
