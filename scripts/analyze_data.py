@@ -460,35 +460,19 @@ def run_h3_between_groups_day1_initial_accuracy(
     )
 
 
-def visualize_group_average_both_days(
+def visualize_replication_aggregate_both_days(
     block_acc: pd.DataFrame,
     slopes: pd.DataFrame,
-    min_lr_1st_day: float | None = None,
 ) -> plt.Figure:
     """
     Plot average block accuracies for T-first and P-first groups on both days.
 
     - Day 1: blocks 1-8, Day 2: blocks 9-16 (continuous x-axis)
     - T-first in blue shades, P-first in green shades
-    - Day 1 = dark, Day 2 = light
+    - Day 1 = dark, Day 2 = a bit lighter
     - Fit log-linear curves separately for each day
     - Tufte-style: minimal, direct labeling
-
-    Args:
-        min_lr_1st_day: If set, exclude participants with day 1 LR below this threshold
     """
-    # Filter participants by minimum LR on day 1 if specified
-    title_suffix = ""
-    if min_lr_1st_day is not None:
-        # Exclude participants who have LR < min_lr_1st_day on day 1
-        day1_slopes = slopes[slopes["day_index"] == 1]
-        bad_pids = day1_slopes[day1_slopes["b"] < min_lr_1st_day]["participant_id"].unique()
-        n_excluded = len(bad_pids)
-        valid_pids = slopes[~slopes["participant_id"].isin(bad_pids)]["participant_id"].unique()
-        block_acc = block_acc[block_acc["participant_id"].isin(valid_pids)].copy()
-        slopes = slopes[slopes["participant_id"].isin(valid_pids)].copy()
-        title_suffix = f" (excluded {n_excluded} participants with day 1 LR < {min_lr_1st_day})"
-
     # Determine each participant's first-day condition (group)
     day1_cond = (
         slopes[slopes["day_index"] == 1][["participant_id", "cond"]]
@@ -598,12 +582,8 @@ def visualize_group_average_both_days(
     ax.tick_params(axis="y", colors="black", length=3, width=0.5)
     ax.yaxis.set_major_formatter(_accuracy_formatter())
 
-    if title_suffix:
-        ax.set_title(f"Group Average{title_suffix}", fontsize=10)
-
     fig.tight_layout()
-    suffix = "_filtered" if min_lr_1st_day is not None else ""
-    _save(fig, f"group_average_both_days{suffix}.png")
+    _save(fig, "replication_aggregate_both_days.png")
     return fig
 
 
@@ -2118,7 +2098,7 @@ def main():
 
     visualize_learning_curves(block_acc, slopes)
     visualize_learning_curves(block_acc, slopes, day1_only=True)  # Day 1 only comparison
-    visualize_group_average_both_days(block_acc, slopes)
+    visualize_replication_aggregate_both_days(block_acc, slopes)
     plt.show()
 
 
