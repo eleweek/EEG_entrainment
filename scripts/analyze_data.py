@@ -18,6 +18,7 @@ from statsmodels.regression.quantile_regression import QuantReg
 
 
 OUTPUT_DIR = "_generated_charts"
+PUBLIC_ID_TABLE = "participant_public_id_mapping"
 
 
 def _save(fig: plt.Figure, filename: str, dpi: int = 450) -> None:
@@ -202,6 +203,47 @@ def load_trials(
         df["start_ts"] = df["start_ts"].astype(float)
 
     return df
+
+
+def load_public_participant_id_mapping(db_path: str) -> dict[str, str]:
+    """Load internal -> public participant ID mapping from the SQLite DB."""
+    with sqlite3.connect(db_path) as con:
+        table_exists = con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (PUBLIC_ID_TABLE,),
+        ).fetchone()
+        if table_exists is None:
+            raise ValueError(
+                f"Missing {PUBLIC_ID_TABLE!r} table in {db_path}. "
+                "Run scripts/create_public_participant_ids.py first, "
+                "or pass --use-internal-ids for private/debug charts."
+            )
+
+        rows = con.execute(
+            f"""
+            SELECT participant_id, public_participant_id
+            FROM {PUBLIC_ID_TABLE}
+            """
+        ).fetchall()
+
+    return {participant_id: public_id for participant_id, public_id in rows}
+
+
+def replace_with_public_participant_ids(block_acc: pd.DataFrame, db_path: str) -> pd.DataFrame:
+    """Replace internal participant IDs with stable public IDs for plotting/export-like output."""
+    public_id_mapping = load_public_participant_id_mapping(db_path)
+    missing = sorted(set(block_acc["participant_id"]) - set(public_id_mapping))
+    if missing:
+        raise ValueError(
+            "Missing public participant IDs for: "
+            + ", ".join(missing)
+            + f". Recreate or repair {PUBLIC_ID_TABLE!r}, "
+            + "or pass --use-internal-ids for private/debug charts."
+        )
+
+    block_acc = block_acc.copy()
+    block_acc["participant_id"] = block_acc["participant_id"].map(public_id_mapping)
+    return block_acc
 
 
 def add_day_index(df_trials: pd.DataFrame) -> pd.DataFrame:
@@ -778,6 +820,7 @@ def load_replication_data(
     include_only: list[str] | None = None,
     exclude: list[str] | None = None,
     fit_method: str = "ols",
+    use_internal_ids: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Load replication block accuracy + per-session log-linear fits.
@@ -788,6 +831,8 @@ def load_replication_data(
     """
     if (db_path is None) == (from_export_path is None):
         raise ValueError("Provide exactly one of db_path or from_export_path")
+    if from_export_path is not None and use_internal_ids:
+        raise ValueError("--use-internal-ids cannot be used with --from-export")
 
     if from_export_path is not None:
         print(f"Loading exported accuracy data from {from_export_path}...")
@@ -823,6 +868,12 @@ def load_replication_data(
             .reset_index(name="accuracy")
         )
         block_acc["accuracy"] = block_acc["accuracy"] * 100
+
+        if use_internal_ids:
+            print("Using internal participant IDs for charts.")
+        else:
+            print("Using public participant IDs for charts.")
+            block_acc = replace_with_public_participant_ids(block_acc, db_path)
 
     print(f"Fitting with method: {fit_method}")
     slopes = fit_slopes_per_session(block_acc, method=fit_method)
@@ -1890,6 +1941,14 @@ def main():
         help="Fitting method: 'ols' (L2 loss, default) or 'l1' (L1 loss / median regression)"
     )
     parser.add_argument(
+        "--use-internal-ids",
+        action="store_true",
+        help=(
+            "Use internal DB participant IDs in charts. Only valid with --db; "
+            "exported data already uses public IDs."
+        ),
+    )
+    parser.add_argument(
         "--original-data-dir",
         type=str,
         required=True,
@@ -1914,6 +1973,8 @@ def main():
         parser.error("--db and --from-export are mutually exclusive")
     if args.db is None and args.from_export is None:
         parser.error("Must provide either --db or --from-export")
+    if args.from_export is not None and args.use_internal_ids:
+        parser.error("--use-internal-ids cannot be used with --from-export")
 
     # Parse participant filters
     include_only = parse_participant_list(args.include_only_participants)
@@ -1928,6 +1989,7 @@ def main():
         include_only=include_only,
         exclude=exclude,
         fit_method=args.fit_method,
+        use_internal_ids=args.use_internal_ids,
     )
 
     print(f"\nLoading original paper data from {args.original_data_dir}...")
