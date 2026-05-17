@@ -722,7 +722,7 @@ def visualize_learning_curves(
     # Percent formatter on the axis that still shows y-tick labels
     axes[0, 0].yaxis.set_major_formatter(_accuracy_formatter())
 
-    fig.tight_layout(rect=(0, 0.035, 0.98, 0.90))
+    fig.tight_layout(rect=(0, 0.035, 0.98, 0.965))
     fig.subplots_adjust(wspace=0.08, hspace=0.24)
     # Add extra space between columns 1 and 2 (between P-first and T-first)
     for row_idx in range(n_rows):
@@ -733,16 +733,24 @@ def visualize_learning_curves(
 
     # Column headers just above each chart (subordinate to group headers)
     col_headers = ["Day 1, P-match", "Day 2, T-match", "Day 1, T-match", "Day 2, P-match"]
+    axes_top = max(axes[0, col_idx].get_position().y1 for col_idx in range(4))
     for col_idx, header in enumerate(col_headers):
         ax = axes[0, col_idx]
         pos = ax.get_position()
-        fig.text(pos.x0 + pos.width / 2, pos.y1 + 0.01, header,
+        fig.text(pos.x0 + pos.width / 2, axes_top + 0.002, header,
                  ha="center", va="bottom", fontsize=11, color="#000000")
 
-    # Group headers above the column headers
-    fig.text(0.25, 0.95, "Replication: P-match first", ha="center", va="top",
+    # Group headers above the column headers, centered over the actual axes groups.
+    p_group_pos0 = axes[0, 0].get_position()
+    p_group_pos1 = axes[0, 1].get_position()
+    t_group_pos0 = axes[0, 2].get_position()
+    t_group_pos1 = axes[0, 3].get_position()
+    p_group_center = (p_group_pos0.x0 + p_group_pos1.x1) / 2
+    t_group_center = (t_group_pos0.x0 + t_group_pos1.x1) / 2
+    group_header_y = axes_top + 0.028
+    fig.text(p_group_center, group_header_y, "P-match first", ha="center", va="top",
              fontsize=13, fontweight="bold", color="#000000")
-    fig.text(0.75, 0.95, "Replication: T-match first", ha="center", va="top",
+    fig.text(t_group_center, group_header_y, "T-match first", ha="center", va="top",
              fontsize=13, fontweight="bold", color="#000000")
 
     _save(fig, "learning_curves_per_participant.png")
