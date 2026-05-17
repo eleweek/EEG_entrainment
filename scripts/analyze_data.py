@@ -1840,9 +1840,9 @@ def main():
     parser.add_argument(
         "--original-data-dir",
         type=str,
-        default=None,
+        required=True,
         metavar="DIR",
-        help="Load and visualize original paper data (Michael et al., 2023) from DIR instead of study DB"
+        help="Directory with original paper data (Michael et al., 2023): AccPerLat.csv, groupLR_forLMM.csv, groupAccs2_lmm_b1.csv"
     )
     parser.add_argument(
         "--charts-save-dir",
@@ -1878,182 +1878,180 @@ def main():
         fit_method=args.fit_method,
     )
 
-    # Handle original paper data mode (after replication data loaded, so we can compare)
-    if args.original_data_dir is not None:
-        print(f"\nLoading original paper data from {args.original_data_dir}...")
+    print(f"\nLoading original paper data from {args.original_data_dir}...")
 
-        # Load P-match vs T-match
-        orig_block_acc, orig_slopes = refit_approximate_original_paper_curves(args.original_data_dir)
-        print(f"Loaded {len(orig_slopes)} participants (P-match and T-match)")
+    # Load P-match vs T-match
+    orig_block_acc, orig_slopes = refit_approximate_original_paper_curves(args.original_data_dir)
+    print(f"Loaded {len(orig_slopes)} participants (P-match and T-match)")
 
-        # Print fitted slopes
-        print("\n=== Original Paper Fitted slopes (P-match vs T-match) ===")
-        print(orig_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
+    # Print fitted slopes
+    print("\n=== Original Paper Fitted slopes (P-match vs T-match) ===")
+    print(orig_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
 
-        # Load T-match vs Control (needed for aggregate chart)
-        print("\nLoading T-match vs Control comparison...")
-        tc_block_acc, tc_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={2: "T", 4: "C"})
-        print(f"Loaded {len(tc_slopes)} participants (T-match and Control)")
+    # Load T-match vs Control (needed for aggregate chart)
+    print("\nLoading T-match vs Control comparison...")
+    tc_block_acc, tc_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={2: "T", 4: "C"})
+    print(f"Loaded {len(tc_slopes)} participants (T-match and Control)")
 
-        # Extract control data for aggregate chart
-        control_block_acc = tc_block_acc[tc_block_acc["cond"] == "C"]
-        control_slopes = tc_slopes[tc_slopes["cond"] == "C"]
+    # Extract control data for aggregate chart
+    control_block_acc = tc_block_acc[tc_block_acc["cond"] == "C"]
+    control_slopes = tc_slopes[tc_slopes["cond"] == "C"]
 
-        # Load T-nonMatch (needed for specific aggregate chart)
-        print("\nLoading T-nonMatch...")
-        tn_block_acc, tn_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={3: "TN"})
-        print(f"Loaded {len(tn_slopes)} participants (T-nonMatch)")
+    # Load T-nonMatch (needed for specific aggregate chart)
+    print("\nLoading T-nonMatch...")
+    tn_block_acc, tn_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={3: "TN"})
+    print(f"Loaded {len(tn_slopes)} participants (T-nonMatch)")
 
-        # Visualize P-match vs T-match individual curves
-        visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=20, cols_per_group=3)
+    # Visualize P-match vs T-match individual curves
+    visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=20, cols_per_group=3)
 
-        # Original (all + filtered) alongside replication, in 3 panels
-        visualize_original_vs_replication_aggregate(
-            original_data=(orig_block_acc, orig_slopes),
-            replication_data=(block_acc, slopes),
-            min_lr_1st_day_original=-1,
+    # Original (all + filtered) alongside replication, in 3 panels
+    visualize_original_vs_replication_aggregate(
+        original_data=(orig_block_acc, orig_slopes),
+        replication_data=(block_acc, slopes),
+        min_lr_1st_day_original=-1,
+    )
+
+    # Print fitted slopes
+    print("\n=== Original Paper Fitted slopes (T-match vs Control) ===")
+    print(tc_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
+
+    # Visualize T-match vs Control
+    visualize_original_individual_curves(tc_block_acc, tc_slopes, max_per_group=20, cols_per_group=3,
+                                        cond_labels={"T": "T-match", "C": "Arrhythmic Control"})
+
+    # Load P-match vs Control
+    print("\nLoading P-match vs Control comparison...")
+    pc_block_acc, pc_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={1: "P", 4: "C"})
+    print(f"Loaded {len(pc_slopes)} participants (P-match and Control)")
+
+    # Print fitted slopes
+    print("\n=== Original Paper Fitted slopes (P-match vs Control) ===")
+    print(pc_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
+
+    # Visualize P-match vs Control
+    visualize_original_individual_curves(pc_block_acc, pc_slopes, max_per_group=20, cols_per_group=3,
+                                        cond_labels={"P": "P-match", "C": "Arrhythmic Control"})
+
+    # Load T-nonMatch data for strip plot
+    print("\nLoading T-nonMatch data...")
+    tn_block_acc, tn_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={3: "TN"})
+    print(f"Loaded {len(tn_slopes)} participants (T-nonMatch)")
+
+    # Prepare data for strip plot - use PROVIDED learning rates for original data
+    print("\nLoading provided learning rates from groupLR_forLMM.csv...")
+    provided_slopes = load_original_paper_provided_learning_rates(args.original_data_dir)
+
+    if provided_slopes is None:
+        raise FileNotFoundError(
+            f"groupLR_forLMM.csv not found in {args.original_data_dir}. "
+            "This file is required for the strip plot to use the paper's official learning rates."
         )
 
-        # Print fitted slopes
-        print("\n=== Original Paper Fitted slopes (T-match vs Control) ===")
-        print(tc_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
+    print("Using provided learning rates for original data (from groupLR_forLMM.csv)")
+    p_slopes_only = provided_slopes[provided_slopes["cond"] == "P"]
+    t_slopes_only = provided_slopes[provided_slopes["cond"] == "T"]
+    tn_slopes_only = provided_slopes[provided_slopes["cond"] == "TN"]
+    # Control not in groupLR_forLMM.csv, use computed
+    c_slopes_only = tc_slopes[tc_slopes["cond"] == "C"]
 
-        # Visualize T-match vs Control
-        visualize_original_individual_curves(tc_block_acc, tc_slopes, max_per_group=20, cols_per_group=3,
-                                            cond_labels={"T": "T-match", "C": "Arrhythmic Control"})
+    # Strip plot of individual learning rates by group
+    print("\nGenerating learning rate strip plot...")
+    rep_day1_slopes_for_strip = slopes[slopes["day_index"] == 1]
+    rep_p_slopes_only = rep_day1_slopes_for_strip[rep_day1_slopes_for_strip["cond"] == "P"]
+    rep_t_slopes_only = rep_day1_slopes_for_strip[rep_day1_slopes_for_strip["cond"] == "T"]
+    visualize_lr_strip_plot(
+        p_slopes_only, t_slopes_only, tn_slopes_only, c_slopes_only,
+        rep_p_slopes_only, rep_t_slopes_only
+    )
+    visualize_lr_strip_plot(
+        p_slopes_only, t_slopes_only, tn_slopes_only, c_slopes_only,
+        rep_p_slopes_only, rep_t_slopes_only, compact=True
+    )
 
-        # Load P-match vs Control
-        print("\nLoading P-match vs Control comparison...")
-        pc_block_acc, pc_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={1: "P", 4: "C"})
-        print(f"Loaded {len(pc_slopes)} participants (P-match and Control)")
+    # Day 2 strip plot (original study, second session)
+    print("\nGenerating Day 2 strip plot...")
+    day2_slopes = load_original_paper_provided_learning_rates(".", filename="groupLR_postLMM.csv")
+    if day2_slopes is not None:
+        visualize_day2_strip_plot(day2_slopes)
+    else:
+        print("  groupLR_postLMM.csv not found, skipping day 2 strip plot")
 
-        # Print fitted slopes
-        print("\n=== Original Paper Fitted slopes (P-match vs Control) ===")
-        print(pc_slopes.sort_values(["cond", "participant_id"]).to_string(index=False))
+    # Initial accuracy strip plot
+    print("\nGenerating initial accuracy strip plot...")
+    b1_path = os.path.join(args.original_data_dir, "groupAccs2_lmm_b1.csv")
+    rep_day1_block_acc_for_b1 = block_acc[block_acc["day_index"] == 1]
+    rep_day1_slopes_for_b1 = slopes[slopes["day_index"] == 1]
+    visualize_initial_accuracy_strip_plot(
+        b1_path, rep_day1_block_acc_for_b1,
+        orig_slopes=orig_slopes, rep_slopes=rep_day1_slopes_for_b1,
+    )
 
-        # Visualize P-match vs Control
-        visualize_original_individual_curves(pc_block_acc, pc_slopes, max_per_group=20, cols_per_group=3,
-                                            cond_labels={"P": "P-match", "C": "Arrhythmic Control"})
+    # Spaghetti plots: individual learning curves overlaid per group
+    print("\nGenerating spaghetti plots...")
+    rep_day1_block_acc = block_acc[block_acc["day_index"] == 1]
+    rep_day1_slopes_all = slopes[slopes["day_index"] == 1]
 
-        # Load T-nonMatch data for strip plot
-        print("\nLoading T-nonMatch data...")
-        tn_block_acc, tn_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={3: "TN"})
-        print(f"Loaded {len(tn_slopes)} participants (T-nonMatch)")
+    # Helper to extract (title, block_acc, slopes, color) for a condition
+    def _panel(ba, sl, cond, label, color, section):
+        ba_c = ba[ba["cond"] == cond]
+        sl_c = sl[sl["cond"] == cond]
+        return (f"{section} {label}", ba_c, sl_c, color)
 
-        # Prepare data for strip plot - use PROVIDED learning rates for original data
-        print("\nLoading provided learning rates from groupLR_forLMM.csv...")
-        provided_slopes = load_original_paper_provided_learning_rates(args.original_data_dir)
+    orig_t = _panel(orig_block_acc, orig_slopes, "T", "T-match", "#1f5f8a", "Original")
+    orig_p = _panel(orig_block_acc, orig_slopes, "P", "P-match", "#2d8a2d", "Original")
+    orig_tn = _panel(tn_block_acc, tn_slopes, "TN", "T-nonMatch", "#9370DB", "Original")
+    orig_c = _panel(control_block_acc, control_slopes, "C", "Arrhythmic Control", "#666666", "Original")
+    rep_t = _panel(rep_day1_block_acc, rep_day1_slopes_all, "T", "T-match", "#1f5f8a", "Replication")
+    rep_p = _panel(rep_day1_block_acc, rep_day1_slopes_all, "P", "P-match", "#2d8a2d", "Replication")
 
-        if provided_slopes is None:
-            raise FileNotFoundError(
-                f"groupLR_forLMM.csv not found in {args.original_data_dir}. "
-                "This file is required for the strip plot to use the paper's official learning rates."
-            )
+    # Plot 1: all groups (4 orig on top, 2 rep on bottom)
+    _spaghetti_grid([
+        [orig_t, orig_p, orig_tn, orig_c],
+        [rep_t, rep_p, None, None],
+    ], "spaghetti_all.png")
 
-        print("Using provided learning rates for original data (from groupLR_forLMM.csv)")
-        p_slopes_only = provided_slopes[provided_slopes["cond"] == "P"]
-        t_slopes_only = provided_slopes[provided_slopes["cond"] == "T"]
-        tn_slopes_only = provided_slopes[provided_slopes["cond"] == "TN"]
-        # Control not in groupLR_forLMM.csv, use computed
-        c_slopes_only = tc_slopes[tc_slopes["cond"] == "C"]
+    # Plot 2: T-match and P-match comparison (2x2)
+    _spaghetti_grid([
+        [orig_t, rep_t],
+        [orig_p, rep_p],
+    ], "spaghetti_comparison.png")
 
-        # Strip plot of individual learning rates by group
-        print("\nGenerating learning rate strip plot...")
-        rep_day1_slopes_for_strip = slopes[slopes["day_index"] == 1]
-        rep_p_slopes_only = rep_day1_slopes_for_strip[rep_day1_slopes_for_strip["cond"] == "P"]
-        rep_t_slopes_only = rep_day1_slopes_for_strip[rep_day1_slopes_for_strip["cond"] == "T"]
-        visualize_lr_strip_plot(
-            p_slopes_only, t_slopes_only, tn_slopes_only, c_slopes_only,
-            rep_p_slopes_only, rep_t_slopes_only
-        )
-        visualize_lr_strip_plot(
-            p_slopes_only, t_slopes_only, tn_slopes_only, c_slopes_only,
-            rep_p_slopes_only, rep_t_slopes_only, compact=True
-        )
+    # Leave-one-out sensitivity plot (original provided learning rates)
+    print("\nGenerating leave-one-out sensitivity plot...")
+    visualize_leave_one_out(provided_slopes)
 
-        # Day 2 strip plot (original study, second session)
-        print("\nGenerating Day 2 strip plot...")
-        day2_slopes = load_original_paper_provided_learning_rates(".", filename="groupLR_postLMM.csv")
-        if day2_slopes is not None:
-            visualize_day2_strip_plot(day2_slopes)
-        else:
-            print("  groupLR_postLMM.csv not found, skipping day 2 strip plot")
+    # Validation strip plot: provided vs recomputed learning rates
+    print("\nGenerating validation strip plot (provided vs recomputed)...")
+    visualize_validation_strip_plot(provided_slopes, orig_slopes, tn_slopes)
 
-        # Initial accuracy strip plot
-        print("\nGenerating initial accuracy strip plot...")
-        b1_path = os.path.join(args.original_data_dir, "groupAccs2_lmm_b1.csv")
-        rep_day1_block_acc_for_b1 = block_acc[block_acc["day_index"] == 1]
-        rep_day1_slopes_for_b1 = slopes[slopes["day_index"] == 1]
-        visualize_initial_accuracy_strip_plot(
-            b1_path, rep_day1_block_acc_for_b1,
-            orig_slopes=orig_slopes, rep_slopes=rep_day1_slopes_for_b1,
-        )
+    # T-tests: Compare replication vs original learning rates
+    print("\n=== T-tests: Replication vs Original Learning Rates ===")
+    from scipy import stats
 
-        # Spaghetti plots: individual learning curves overlaid per group
-        print("\nGenerating spaghetti plots...")
-        rep_day1_block_acc = block_acc[block_acc["day_index"] == 1]
-        rep_day1_slopes_all = slopes[slopes["day_index"] == 1]
+    # Filter to day 1 only for replication
+    rep_day1_slopes = slopes[slopes["day_index"] == 1]
 
-        # Helper to extract (title, block_acc, slopes, color) for a condition
-        def _panel(ba, sl, cond, label, color, section):
-            ba_c = ba[ba["cond"] == cond]
-            sl_c = sl[sl["cond"] == cond]
-            return (f"{section} {label}", ba_c, sl_c, color)
+    # T-match comparison
+    orig_t_lr = orig_slopes[orig_slopes["cond"] == "T"]["b"].values
+    rep_t_lr = rep_day1_slopes[rep_day1_slopes["cond"] == "T"]["b"].values
+    t_result = stats.ttest_ind(rep_t_lr, orig_t_lr, equal_var=False)
+    print(f"\nT-match: Replication (n={len(rep_t_lr)}, mean={rep_t_lr.mean():.3f}) vs Original (n={len(orig_t_lr)}, mean={orig_t_lr.mean():.3f})")
+    print(f"  t({t_result.df:.1f}) = {t_result.statistic:.3f}, p = {t_result.pvalue:.4f}")
 
-        orig_t = _panel(orig_block_acc, orig_slopes, "T", "T-match", "#1f5f8a", "Original")
-        orig_p = _panel(orig_block_acc, orig_slopes, "P", "P-match", "#2d8a2d", "Original")
-        orig_tn = _panel(tn_block_acc, tn_slopes, "TN", "T-nonMatch", "#9370DB", "Original")
-        orig_c = _panel(control_block_acc, control_slopes, "C", "Arrhythmic Control", "#666666", "Original")
-        rep_t = _panel(rep_day1_block_acc, rep_day1_slopes_all, "T", "T-match", "#1f5f8a", "Replication")
-        rep_p = _panel(rep_day1_block_acc, rep_day1_slopes_all, "P", "P-match", "#2d8a2d", "Replication")
+    # P-match comparison (all participants)
+    orig_p_lr = orig_slopes[orig_slopes["cond"] == "P"]["b"].values
+    rep_p_lr = rep_day1_slopes[rep_day1_slopes["cond"] == "P"]["b"].values
+    p_result = stats.ttest_ind(rep_p_lr, orig_p_lr, equal_var=False)
+    print(f"\nP-match (all): Replication (n={len(rep_p_lr)}, mean={rep_p_lr.mean():.3f}) vs Original (n={len(orig_p_lr)}, mean={orig_p_lr.mean():.3f})")
+    print(f"  t({p_result.df:.1f}) = {p_result.statistic:.3f}, p = {p_result.pvalue:.4f}")
 
-        # Plot 1: all groups (4 orig on top, 2 rep on bottom)
-        _spaghetti_grid([
-            [orig_t, orig_p, orig_tn, orig_c],
-            [rep_t, rep_p, None, None],
-        ], "spaghetti_all.png")
-
-        # Plot 2: T-match and P-match comparison (2x2)
-        _spaghetti_grid([
-            [orig_t, rep_t],
-            [orig_p, rep_p],
-        ], "spaghetti_comparison.png")
-
-        # Leave-one-out sensitivity plot (original provided learning rates)
-        print("\nGenerating leave-one-out sensitivity plot...")
-        visualize_leave_one_out(provided_slopes)
-
-        # Validation strip plot: provided vs recomputed learning rates
-        print("\nGenerating validation strip plot (provided vs recomputed)...")
-        visualize_validation_strip_plot(provided_slopes, orig_slopes, tn_slopes)
-
-        # T-tests: Compare replication vs original learning rates
-        print("\n=== T-tests: Replication vs Original Learning Rates ===")
-        from scipy import stats
-
-        # Filter to day 1 only for replication
-        rep_day1_slopes = slopes[slopes["day_index"] == 1]
-
-        # T-match comparison
-        orig_t_lr = orig_slopes[orig_slopes["cond"] == "T"]["b"].values
-        rep_t_lr = rep_day1_slopes[rep_day1_slopes["cond"] == "T"]["b"].values
-        t_result = stats.ttest_ind(rep_t_lr, orig_t_lr, equal_var=False)
-        print(f"\nT-match: Replication (n={len(rep_t_lr)}, mean={rep_t_lr.mean():.3f}) vs Original (n={len(orig_t_lr)}, mean={orig_t_lr.mean():.3f})")
-        print(f"  t({t_result.df:.1f}) = {t_result.statistic:.3f}, p = {t_result.pvalue:.4f}")
-
-        # P-match comparison (all participants)
-        orig_p_lr = orig_slopes[orig_slopes["cond"] == "P"]["b"].values
-        rep_p_lr = rep_day1_slopes[rep_day1_slopes["cond"] == "P"]["b"].values
-        p_result = stats.ttest_ind(rep_p_lr, orig_p_lr, equal_var=False)
-        print(f"\nP-match (all): Replication (n={len(rep_p_lr)}, mean={rep_p_lr.mean():.3f}) vs Original (n={len(orig_p_lr)}, mean={orig_p_lr.mean():.3f})")
-        print(f"  t({p_result.df:.1f}) = {p_result.statistic:.3f}, p = {p_result.pvalue:.4f}")
-
-        # P-match comparison (filtered: LR >= -1 on day 1)
-        orig_p_filtered_lr = orig_slopes[(orig_slopes["cond"] == "P") & (orig_slopes["b"] >= -1)]["b"].values
-        rep_p_filtered_lr = rep_day1_slopes[(rep_day1_slopes["cond"] == "P") & (rep_day1_slopes["b"] >= -1)]["b"].values
-        pf_result = stats.ttest_ind(rep_p_filtered_lr, orig_p_filtered_lr, equal_var=False)
-        print(f"\nP-match (filtered LR≥-1): Replication (n={len(rep_p_filtered_lr)}, mean={rep_p_filtered_lr.mean():.3f}) vs Original (n={len(orig_p_filtered_lr)}, mean={orig_p_filtered_lr.mean():.3f})")
-        print(f"  t({pf_result.df:.1f}) = {pf_result.statistic:.3f}, p = {pf_result.pvalue:.4f}")
+    # P-match comparison (filtered: LR >= -1 on day 1)
+    orig_p_filtered_lr = orig_slopes[(orig_slopes["cond"] == "P") & (orig_slopes["b"] >= -1)]["b"].values
+    rep_p_filtered_lr = rep_day1_slopes[(rep_day1_slopes["cond"] == "P") & (rep_day1_slopes["b"] >= -1)]["b"].values
+    pf_result = stats.ttest_ind(rep_p_filtered_lr, orig_p_filtered_lr, equal_var=False)
+    print(f"\nP-match (filtered LR≥-1): Replication (n={len(rep_p_filtered_lr)}, mean={rep_p_filtered_lr.mean():.3f}) vs Original (n={len(orig_p_filtered_lr)}, mean={orig_p_filtered_lr.mean():.3f})")
+    print(f"  t({pf_result.df:.1f}) = {pf_result.statistic:.3f}, p = {pf_result.pvalue:.4f}")
 
     # Run hypothesis tests
     run_h1_within_subject(slopes)
