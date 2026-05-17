@@ -602,8 +602,8 @@ def visualize_learning_curves(
     Create visualization of accuracy and learning rate fits for all participants.
 
     Layout: 4 columns per row:
-      - Columns 0-1: P-first (Day 1, Day 2)
-      - Columns 2-3: T-first (Day 1, Day 2)
+      - Columns 0-1: T-first (Day 1, Day 2)
+      - Columns 2-3: P-first (Day 1, Day 2)
     Two participants per row (one from each group).
     """
     n_blocks = 8
@@ -695,25 +695,25 @@ def visualize_learning_curves(
             ax.set_xticklabels([])
 
     for row_idx in range(n_rows):
-        # P-first participant (columns 0, 1)
-        pid_p = p_first[row_idx] if row_idx < len(p_first) else None
-        # T-first participant (columns 2, 3)
+        # T-first participant (columns 0, 1)
         pid_t = t_first[row_idx] if row_idx < len(t_first) else None
+        # P-first participant (columns 2, 3)
+        pid_p = p_first[row_idx] if row_idx < len(p_first) else None
 
         is_last_row = row_idx == n_rows - 1
 
-        # P-first: Day 1 (col 0), Day 2 (col 1)
-        plot_participant(axes[row_idx, 0], pid_p, 1, is_last_row)
-        plot_participant(axes[row_idx, 1], pid_p, 2, is_last_row)
+        # T-first: Day 1 (col 0), Day 2 (col 1)
+        plot_participant(axes[row_idx, 0], pid_t, 1, is_last_row)
+        plot_participant(axes[row_idx, 1], pid_t, 2, is_last_row)
 
-        # T-first: Day 1 (col 2), Day 2 (col 3)
-        plot_participant(axes[row_idx, 2], pid_t, 1, is_last_row)
-        plot_participant(axes[row_idx, 3], pid_t, 2, is_last_row)
+        # P-first: Day 1 (col 2), Day 2 (col 3)
+        plot_participant(axes[row_idx, 2], pid_p, 1, is_last_row)
+        plot_participant(axes[row_idx, 3], pid_p, 2, is_last_row)
 
-        # Y tick labels only on the leftmost column
+        # Y tick labels on the leftmost column of every row.
         for col_idx in range(4):
             ax = axes[row_idx, col_idx]
-            if not (row_idx == 0 and col_idx == 0):
+            if col_idx != 0:
                 ax.set_yticklabels([])
 
     # Drop x-tick labels and the "Block" xlabel everywhere — the inline
@@ -726,12 +726,13 @@ def visualize_learning_curves(
     for ax in axes.flat:
         ax.set_ylabel("")
     axes[0, 0].set_ylabel("Accuracy", fontsize=8, color="#000000")
-    # Percent formatter on the axis that still shows y-tick labels
-    axes[0, 0].yaxis.set_major_formatter(_accuracy_formatter())
+    # Percent formatter on every axis that still shows y-tick labels.
+    for row_idx in range(n_rows):
+        axes[row_idx, 0].yaxis.set_major_formatter(_accuracy_formatter())
 
     fig.tight_layout(rect=(0, 0.035, 0.98, 0.965))
     fig.subplots_adjust(wspace=0.08, hspace=0.24)
-    # Add extra space between columns 1 and 2 (between P-first and T-first)
+    # Add extra space between columns 1 and 2 (between T-first and P-first)
     for row_idx in range(n_rows):
         for col_idx in [2, 3]:
             ax = axes[row_idx, col_idx]
@@ -739,7 +740,7 @@ def visualize_learning_curves(
             ax.set_position([pos.x0 + 0.02, pos.y0, pos.width, pos.height])
 
     # Column headers just above each chart (subordinate to group headers)
-    col_headers = ["Day 1, P-match", "Day 2, T-match", "Day 1, T-match", "Day 2, P-match"]
+    col_headers = ["Day 1, T-match", "Day 2, P-match", "Day 1, P-match", "Day 2, T-match"]
     axes_top = max(axes[0, col_idx].get_position().y1 for col_idx in range(4))
     for col_idx, header in enumerate(col_headers):
         ax = axes[0, col_idx]
@@ -748,16 +749,16 @@ def visualize_learning_curves(
                  ha="center", va="bottom", fontsize=11, color="#000000")
 
     # Group headers above the column headers, centered over the actual axes groups.
-    p_group_pos0 = axes[0, 0].get_position()
-    p_group_pos1 = axes[0, 1].get_position()
-    t_group_pos0 = axes[0, 2].get_position()
-    t_group_pos1 = axes[0, 3].get_position()
-    p_group_center = (p_group_pos0.x0 + p_group_pos1.x1) / 2
+    t_group_pos0 = axes[0, 0].get_position()
+    t_group_pos1 = axes[0, 1].get_position()
+    p_group_pos0 = axes[0, 2].get_position()
+    p_group_pos1 = axes[0, 3].get_position()
     t_group_center = (t_group_pos0.x0 + t_group_pos1.x1) / 2
+    p_group_center = (p_group_pos0.x0 + p_group_pos1.x1) / 2
     group_header_y = axes_top + 0.028
-    fig.text(p_group_center, group_header_y, "P-match first", ha="center", va="top",
-             fontsize=13, fontweight="bold", color="#000000")
     fig.text(t_group_center, group_header_y, "T-match first", ha="center", va="top",
+             fontsize=13, fontweight="bold", color="#000000")
+    fig.text(p_group_center, group_header_y, "P-match first", ha="center", va="top",
              fontsize=13, fontweight="bold", color="#000000")
 
     _save(fig, "learning_curves_per_participant.png")
@@ -1549,8 +1550,10 @@ def visualize_original_individual_curves(
     if cond_labels is None:
         cond_labels = {"P": "P-match", "T": "T-match"}
 
-    # Get the two conditions from the data
-    conditions = sorted(slopes["cond"].unique())
+    # Get the two conditions from the data, using the same first-comparison
+    # order as the manuscript figures.
+    condition_order = {"T": 0, "P": 1, "TN": 2, "C": 3}
+    conditions = sorted(slopes["cond"].unique(), key=lambda c: (condition_order.get(c, 99), c))
     if len(conditions) != 2:
         raise ValueError(f"Expected 2 conditions, got {len(conditions)}: {conditions}")
 
@@ -1654,18 +1657,19 @@ def visualize_original_individual_curves(
     for ax in axes.flat:
         ax.set_xticklabels([])
         ax.set_xlabel("")
-    # Y-tick labels only on the leftmost column
+    # Y-tick labels on the leftmost column of every row.
     for row_idx in range(n_rows):
         for col_idx in range(n_cols):
-            if not (row_idx == 0 and col_idx == 0):
+            if col_idx != 0:
                 axes[row_idx, col_idx].set_yticklabels([])
 
     # Y-axis label only on the top-left chart
     for ax in axes.flat:
         ax.set_ylabel("")
     axes[0, 0].set_ylabel("Accuracy", fontsize=8, color="#000000")
-    # Percent formatter on the axis that still shows y-tick labels
-    axes[0, 0].yaxis.set_major_formatter(_accuracy_formatter())
+    # Percent formatter on every axis that still shows y-tick labels.
+    for row_idx in range(n_rows):
+        axes[row_idx, 0].yaxis.set_major_formatter(_accuracy_formatter())
 
     fig.subplots_adjust(left=0.045, right=0.985, bottom=0.06, top=0.972,
                         wspace=0.00, hspace=0.16)
