@@ -23,7 +23,13 @@ OUTPUT_DIR = "_generated_charts"
 def _save(fig: plt.Figure, filename: str, dpi: int = 450) -> None:
     """Save a figure into OUTPUT_DIR (created on first use)."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    fig.savefig(os.path.join(OUTPUT_DIR, filename), dpi=dpi, bbox_inches="tight")
+    output_path = os.path.join(OUTPUT_DIR, filename)
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
+
+    stem, _ = os.path.splitext(filename)
+    svg_path = os.path.join(OUTPUT_DIR, f"{stem}.svg")
+    with plt.rc_context({"svg.fonttype": "none"}):
+        fig.savefig(svg_path, format="svg", bbox_inches="tight")
 
 
 def _fmt_lr(lr: float, digits: int = 2) -> str:
