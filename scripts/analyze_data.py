@@ -19,6 +19,7 @@ from statsmodels.regression.quantile_regression import QuantReg
 
 OUTPUT_DIR = "_generated_charts"
 PUBLIC_ID_TABLE = "participant_public_id_mapping"
+EXPORTED_BLOCK_ACCURACY_FILENAME = "block_accuracy.csv"
 
 
 def _save(fig: plt.Figure, filename: str, dpi: int = 450) -> None:
@@ -158,7 +159,7 @@ def load_trials(
         exclude: If provided, exclude these participant IDs
 
     Returns columns:
-      participant_id, session_id, start_ts, block, cond, correct
+      participant_id, session_id, start_ts, block, cond, correct, timed_out
     """
     con = sqlite3.connect(db_path)
     try:
@@ -186,7 +187,8 @@ def load_trials(
             t.trial_index,
             t.block,
             t.cond,
-            t.correct
+            t.correct,
+            t.timed_out
         FROM trial t
         JOIN session s ON s.id = t.session_id
         {where_sql}
@@ -200,6 +202,7 @@ def load_trials(
     if not df.empty:
         df["block"] = df["block"].astype(int)
         df["correct"] = df["correct"].astype(int)
+        df["timed_out"] = df["timed_out"].astype(int)
         df["start_ts"] = df["start_ts"].astype(float)
 
     return df
@@ -825,7 +828,7 @@ def load_replication_data(
     """
     Load replication block accuracy + per-session log-linear fits.
 
-    Source is either an exported accuracy CSV (from_export_path) or the SQLite
+    Source is either an exported public-data directory (from_export_path) or the SQLite
     study DB (db_path). Exactly one must be provided. Raises ValueError if
     the source resolves to zero rows after any include/exclude filtering.
     """
@@ -835,8 +838,9 @@ def load_replication_data(
         raise ValueError("--use-internal-ids cannot be used with --from-export")
 
     if from_export_path is not None:
-        print(f"Loading exported accuracy data from {from_export_path}...")
-        block_acc = pd.read_csv(from_export_path)
+        block_acc_path = os.path.join(from_export_path, EXPORTED_BLOCK_ACCURACY_FILENAME)
+        print(f"Loading exported accuracy data from {block_acc_path}...")
+        block_acc = pd.read_csv(block_acc_path)
 
         if include_only is not None:
             block_acc = block_acc[block_acc["participant_id"].isin(include_only)]
@@ -844,7 +848,7 @@ def load_replication_data(
             block_acc = block_acc[~block_acc["participant_id"].isin(exclude)]
 
         if block_acc.empty:
-            raise ValueError(f"No accuracy rows in {from_export_path} after filtering")
+            raise ValueError(f"No accuracy rows in {block_acc_path} after filtering")
 
         print(f"Loaded {len(block_acc)} accuracy rows from {block_acc['participant_id'].nunique()} participants")
     else:
@@ -1917,9 +1921,9 @@ def main():
         "--from-export",
         type=str,
         default=None,
-        metavar="FILE",
+        metavar="DIR",
         help=(
-            "Path to replication accuracy CSV (produced by export_replication_data.py). "
+            "Path to replication public export directory (produced by export_replication_data.py). "
             "Slopes are recomputed using --fit-method. Mutually exclusive with --db."
         ),
     )

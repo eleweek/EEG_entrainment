@@ -1,15 +1,16 @@
 """
-Export replication study per-block accuracy to CSV.
+Export replication study public data to CSV files.
 
-Reads the SQLite study DB and writes one row per (public participant, session, block):
-  participant_id, cond, day_index, block, accuracy
+Reads the SQLite study DB and writes:
+  - block_accuracy.csv: one row per (public participant, day, block)
+  - sessions.csv: one row per (public participant, day)
 
 The exported participant_id values are public scrambled IDs from the
 participant_public_id_mapping table. Internal participant IDs are not exported.
 
 Learning rates are not exported -- they are recomputed by analyze_data.py
 
-The CSV is the input format consumed by `analyze_data.py --from-export`.
+The output directory is the input consumed by `analyze_data.py --from-export`.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ from __future__ import annotations
 import argparse
 import os
 import sqlite3
+
+import pandas as pd
 
 from analyze_data import (
     add_day_index,
@@ -26,6 +29,8 @@ from analyze_data import (
 
 
 PUBLIC_ID_TABLE = "participant_public_id_mapping"
+BLOCK_ACCURACY_FILENAME = "block_accuracy.csv"
+SESSIONS_FILENAME = "sessions.csv"
 
 
 def load_public_id_mapping(db_path: str) -> dict[str, str]:
@@ -50,6 +55,21 @@ def load_public_id_mapping(db_path: str) -> dict[str, str]:
     return {participant_id: public_id for participant_id, public_id in rows}
 
 
+def load_session_metadata(db_path: str) -> pd.DataFrame:
+    with sqlite3.connect(db_path) as conn:
+        return pd.read_sql_query(
+            """
+            SELECT
+                id AS session_id,
+                participant_id,
+                iaf_hz,
+                flicker_freq_hz
+            FROM session
+            """,
+            conn,
+        )
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -57,8 +77,8 @@ def main():
         help="Path to SQLite database"
     )
     parser.add_argument(
-        "output",
-        help="Output CSV path"
+        "output_dir",
+        help="Directory where public CSV exports should be written"
     )
     parser.add_argument(
         "--include-only-participants",
@@ -97,16 +117,43 @@ def main():
 
     df = add_day_index(df)
 
-    # Per-block accuracy (0-100%)
+    # Per-block accuracy (0-100%) plus coarse block counts.
     block_acc = (
-        df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])["correct"]
-        .mean()
-        .reset_index(name="accuracy")
+        df.groupby(["participant_id", "session_id", "start_ts", "block", "day_index", "cond"])
+        .agg(
+            n_trials=("correct", "size"),
+            n_correct=("correct", "sum"),
+            n_timeouts=("timed_out", "sum"),
+            accuracy=("correct", "mean"),
+        )
+        .reset_index()
     )
     block_acc["accuracy"] = block_acc["accuracy"] * 100
 
+    session_cond = (
+        df.groupby(["participant_id", "session_id", "start_ts", "day_index"])["cond"]
+        .nunique()
+        .reset_index(name="n_conditions")
+    )
+    multi_cond_sessions = session_cond[session_cond["n_conditions"] != 1]
+    if not multi_cond_sessions.empty:
+        raise RuntimeError("Expected exactly one condition per participant session.")
+
+    session_export = (
+        df.groupby(["participant_id", "session_id", "start_ts", "day_index"])["cond"]
+        .first()
+        .reset_index()
+        .merge(
+            load_session_metadata(args.db),
+            on=["participant_id", "session_id"],
+            how="left",
+        )
+    )
+
     public_id_mapping = load_public_id_mapping(args.db)
-    missing_mapping = sorted(set(block_acc["participant_id"]) - set(public_id_mapping))
+    missing_mapping = sorted(
+        (set(block_acc["participant_id"]) | set(session_export["participant_id"])) - set(public_id_mapping)
+    )
     if missing_mapping:
         raise RuntimeError(
             "Missing public participant IDs for: "
@@ -115,16 +162,27 @@ def main():
         )
 
     block_acc["participant_id"] = block_acc["participant_id"].map(public_id_mapping)
+    session_export["participant_id"] = session_export["participant_id"].map(public_id_mapping)
 
-    out_dir = os.path.dirname(args.output)
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(args.output_dir, exist_ok=True)
+    block_output = os.path.join(args.output_dir, BLOCK_ACCURACY_FILENAME)
+    sessions_output = os.path.join(args.output_dir, SESSIONS_FILENAME)
 
-    block_acc[["participant_id", "cond", "day_index", "block", "accuracy"]].sort_values(
+    block_acc[[
+        "participant_id", "cond", "day_index", "block",
+        "n_trials", "n_correct", "n_timeouts", "accuracy",
+    ]].sort_values(
         ["participant_id", "day_index", "block"]
-    ).round({"accuracy": 3}).to_csv(args.output, index=False)
+    ).round({"accuracy": 3}).to_csv(block_output, index=False)
 
-    print(f"\nExported {len(block_acc)} rows to {args.output}")
+    session_export[[
+        "participant_id", "day_index", "cond", "iaf_hz", "flicker_freq_hz",
+    ]].sort_values(
+        ["participant_id", "day_index"]
+    ).round({"iaf_hz": 1, "flicker_freq_hz": 1}).to_csv(sessions_output, index=False)
+
+    print(f"\nExported {len(block_acc)} block rows to {block_output}")
+    print(f"Exported {len(session_export)} session rows to {sessions_output}")
 
 
 if __name__ == "__main__":
