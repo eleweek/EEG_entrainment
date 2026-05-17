@@ -590,14 +590,13 @@ def visualize_replication_aggregate_both_days(
 def visualize_learning_curves(
     block_acc: pd.DataFrame,
     slopes: pd.DataFrame,
-    day1_only: bool = False,
 ) -> plt.Figure:
     """
     Create visualization of accuracy and learning rate fits for all participants.
 
-    Layout: 4 columns per row (default) or 2 columns per row (day1_only=True)
-      - Default: Columns 0-1: P-first (Day 1, Day 2), Columns 2-3: T-first (Day 1, Day 2)
-      - day1_only: Column 0: P-first (Day 1), Column 1: T-first (Day 1)
+    Layout: 4 columns per row:
+      - Columns 0-1: P-first (Day 1, Day 2)
+      - Columns 2-3: T-first (Day 1, Day 2)
     Two participants per row (one from each group).
     """
     n_blocks = 8
@@ -615,14 +614,9 @@ def visualize_learning_curves(
 
     n_rows = max(len(p_first), len(t_first))
 
-    # Layout: 2 columns (day1_only) or 4 columns (default)
     panel_size = 2.5
-    if day1_only:
-        n_cols = 2
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(panel_size * n_cols, panel_size * n_rows), squeeze=False)
-    else:
-        n_cols = 4
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(panel_size * n_cols, panel_size * n_rows), squeeze=False)
+    n_cols = 4
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(panel_size * n_cols, panel_size * n_rows), squeeze=False)
 
     # Compute global y-axis range from data with small padding
     all_acc = block_acc["accuracy"].values
@@ -693,106 +687,65 @@ def visualize_learning_curves(
         else:
             ax.set_xticklabels([])
 
-    if day1_only:
-        # Day 1 only: 2 columns (P-first, T-first)
-        for row_idx in range(n_rows):
-            pid_p = p_first[row_idx] if row_idx < len(p_first) else None
-            pid_t = t_first[row_idx] if row_idx < len(t_first) else None
-            is_last_row = row_idx == n_rows - 1
+    for row_idx in range(n_rows):
+        # P-first participant (columns 0, 1)
+        pid_p = p_first[row_idx] if row_idx < len(p_first) else None
+        # T-first participant (columns 2, 3)
+        pid_t = t_first[row_idx] if row_idx < len(t_first) else None
 
-            # Column 0: P-first Day 1
-            plot_participant(axes[row_idx, 0], pid_p, 1, is_last_row)
-            # Column 1: T-first Day 1
-            plot_participant(axes[row_idx, 1], pid_t, 1, is_last_row)
+        is_last_row = row_idx == n_rows - 1
 
-        # Drop x-tick labels and the "Block" xlabel everywhere
-        for ax in axes.flat:
-            ax.set_xticklabels([])
-            ax.set_xlabel("")
-        # Y-tick labels only on the leftmost column
-        for row_idx in range(n_rows):
-            for col_idx in range(2):
-                if not (row_idx == 0 and col_idx == 0):
-                    axes[row_idx, col_idx].set_yticklabels([])
+        # P-first: Day 1 (col 0), Day 2 (col 1)
+        plot_participant(axes[row_idx, 0], pid_p, 1, is_last_row)
+        plot_participant(axes[row_idx, 1], pid_p, 2, is_last_row)
 
-        # Y-axis label only on the top-left chart
-        for ax in axes.flat:
-            ax.set_ylabel("")
-        axes[0, 0].set_ylabel("Accuracy", fontsize=8, color="#000000")
-        # Percent formatter on the axis that still shows y-tick labels
-        axes[0, 0].yaxis.set_major_formatter(_accuracy_formatter())
+        # T-first: Day 1 (col 2), Day 2 (col 3)
+        plot_participant(axes[row_idx, 2], pid_t, 1, is_last_row)
+        plot_participant(axes[row_idx, 3], pid_t, 2, is_last_row)
 
-        fig.tight_layout(rect=(0, 0.035, 1, 0.95))
-        fig.subplots_adjust(wspace=0.08, hspace=0.24)
+        # Y tick labels only on the leftmost column
+        for col_idx in range(4):
+            ax = axes[row_idx, col_idx]
+            if not (row_idx == 0 and col_idx == 0):
+                ax.set_yticklabels([])
 
-        # Add group headers at the top
-        fig.text(0.25, 0.965, "P-match (Day 1)", ha="center", va="top",
-                 fontsize=12, fontweight="bold", color="#000000")
-        fig.text(0.75, 0.965, "T-match (Day 1)", ha="center", va="top",
-                 fontsize=12, fontweight="bold", color="#000000")
+    # Drop x-tick labels and the "Block" xlabel everywhere — the inline
+    # participant caption already grounds each panel.
+    for ax in axes.flat:
+        ax.set_xticklabels([])
+        ax.set_xlabel("")
 
-    else:
-        # Default: 4 columns (Day 1 + Day 2 for both groups)
-        for row_idx in range(n_rows):
-            # P-first participant (columns 0, 1)
-            pid_p = p_first[row_idx] if row_idx < len(p_first) else None
-            # T-first participant (columns 2, 3)
-            pid_t = t_first[row_idx] if row_idx < len(t_first) else None
+    # Y-axis label only on the top-left chart
+    for ax in axes.flat:
+        ax.set_ylabel("")
+    axes[0, 0].set_ylabel("Accuracy", fontsize=8, color="#000000")
+    # Percent formatter on the axis that still shows y-tick labels
+    axes[0, 0].yaxis.set_major_formatter(_accuracy_formatter())
 
-            is_last_row = row_idx == n_rows - 1
-
-            # P-first: Day 1 (col 0), Day 2 (col 1)
-            plot_participant(axes[row_idx, 0], pid_p, 1, is_last_row)
-            plot_participant(axes[row_idx, 1], pid_p, 2, is_last_row)
-
-            # T-first: Day 1 (col 2), Day 2 (col 3)
-            plot_participant(axes[row_idx, 2], pid_t, 1, is_last_row)
-            plot_participant(axes[row_idx, 3], pid_t, 2, is_last_row)
-
-            # Y tick labels only on the leftmost column
-            for col_idx in range(4):
-                ax = axes[row_idx, col_idx]
-                if not (row_idx == 0 and col_idx == 0):
-                    ax.set_yticklabels([])
-
-        # Drop x-tick labels and the "Block" xlabel everywhere — the inline
-        # participant caption already grounds each panel.
-        for ax in axes.flat:
-            ax.set_xticklabels([])
-            ax.set_xlabel("")
-
-        # Y-axis label only on the top-left chart
-        for ax in axes.flat:
-            ax.set_ylabel("")
-        axes[0, 0].set_ylabel("Accuracy", fontsize=8, color="#000000")
-        # Percent formatter on the axis that still shows y-tick labels
-        axes[0, 0].yaxis.set_major_formatter(_accuracy_formatter())
-
-        fig.tight_layout(rect=(0, 0.035, 0.98, 0.90))
-        fig.subplots_adjust(wspace=0.08, hspace=0.24)
-        # Add extra space between columns 1 and 2 (between P-first and T-first)
-        for row_idx in range(n_rows):
-            for col_idx in [2, 3]:
-                ax = axes[row_idx, col_idx]
-                pos = ax.get_position()
-                ax.set_position([pos.x0 + 0.02, pos.y0, pos.width, pos.height])
-
-        # Column headers just above each chart (subordinate to group headers)
-        col_headers = ["Day 1, P-match", "Day 2, T-match", "Day 1, T-match", "Day 2, P-match"]
-        for col_idx, header in enumerate(col_headers):
-            ax = axes[0, col_idx]
+    fig.tight_layout(rect=(0, 0.035, 0.98, 0.90))
+    fig.subplots_adjust(wspace=0.08, hspace=0.24)
+    # Add extra space between columns 1 and 2 (between P-first and T-first)
+    for row_idx in range(n_rows):
+        for col_idx in [2, 3]:
+            ax = axes[row_idx, col_idx]
             pos = ax.get_position()
-            fig.text(pos.x0 + pos.width / 2, pos.y1 + 0.01, header,
-                     ha="center", va="bottom", fontsize=11, color="#000000")
+            ax.set_position([pos.x0 + 0.02, pos.y0, pos.width, pos.height])
 
-        # Group headers above the column headers
-        fig.text(0.25, 0.95, "Replication: P-match first", ha="center", va="top",
-                 fontsize=13, fontweight="bold", color="#000000")
-        fig.text(0.75, 0.95, "Replication: T-match first", ha="center", va="top",
-                 fontsize=13, fontweight="bold", color="#000000")
+    # Column headers just above each chart (subordinate to group headers)
+    col_headers = ["Day 1, P-match", "Day 2, T-match", "Day 1, T-match", "Day 2, P-match"]
+    for col_idx, header in enumerate(col_headers):
+        ax = axes[0, col_idx]
+        pos = ax.get_position()
+        fig.text(pos.x0 + pos.width / 2, pos.y1 + 0.01, header,
+                 ha="center", va="bottom", fontsize=11, color="#000000")
 
-    suffix = "_day1" if day1_only else ""
-    _save(fig, f"learning_curves_per_participant{suffix}.png")
+    # Group headers above the column headers
+    fig.text(0.25, 0.95, "Replication: P-match first", ha="center", va="top",
+             fontsize=13, fontweight="bold", color="#000000")
+    fig.text(0.75, 0.95, "Replication: T-match first", ha="center", va="top",
+             fontsize=13, fontweight="bold", color="#000000")
+
+    _save(fig, "learning_curves_per_participant.png")
     return fig
 
 
@@ -2119,7 +2072,6 @@ def main():
     run_h3_between_groups_day1_initial_accuracy(block_acc, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=True)
 
     visualize_learning_curves(block_acc, slopes)
-    visualize_learning_curves(block_acc, slopes, day1_only=True)  # Day 1 only comparison
     visualize_replication_aggregate_both_days(block_acc, slopes)
     plt.show()
 
