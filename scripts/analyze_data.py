@@ -563,7 +563,7 @@ def visualize_replication_aggregate_both_days(
             color = colors[(group, day)]
 
             # Plot dots - small, unobtrusive
-            ax.scatter(blocks_plot, acc, c=color, s=20, zorder=3)
+            ax.scatter(blocks_plot, acc, c=color, s=16, zorder=3)
 
             # Fit log-linear curve
             min_b = blocks_original.min()
@@ -586,9 +586,9 @@ def visualize_replication_aggregate_both_days(
         ("P", 2): "P→T-match",
     }
     # Right-edge of each label aligns with the rightmost edge of the dot at the
-    # endpoint, not its center. dot_size=20 in scatter -> radius ~= sqrt(20/pi) pts.
+    # endpoint, not its center. dot_size=16 in scatter -> radius ~= sqrt(16/pi) pts.
     from matplotlib.transforms import offset_copy
-    dot_radius_pts = float(np.sqrt(20 / np.pi))
+    dot_radius_pts = float(np.sqrt(16 / np.pi))
     label_trans = offset_copy(ax.transData, fig=fig, x=dot_radius_pts, units="points")
 
     for (group, day), (x, y, lr) in endpoints.items():
@@ -1187,7 +1187,7 @@ def visualize_lr_strip_plot(
         filename = "strip_plot.png"
 
     _render_strip_plot(ax, groups_info,
-                       section_labels={0: "Original Study, Day 1", 1: "Replication, Day 1"},
+                       section_labels={0: "Original, Day 1", 1: "Replication, Day 1"},
                        x_label="Learning Rates by Group",
                        first_gap=0.7 if compact else None)
 
@@ -1770,6 +1770,15 @@ def visualize_original_vs_replication_aggregate(
         "T": "T-match",
     }
 
+    def participants_per_group_label(slopes_data: pd.DataFrame) -> str:
+        counts = slopes_data.groupby("cond")["participant_id"].nunique()
+        counts = counts.reindex(["T", "P"]).dropna().astype(int)
+        if counts.empty:
+            return "n=0 per group"
+        if counts.nunique() == 1:
+            return f"n={counts.iloc[0]} per group"
+        return ", ".join(f"{labels[cond]} n={count}" for cond, count in counts.items())
+
     def plot_aggregate(
         ax,
         block_acc_data,
@@ -1791,7 +1800,7 @@ def visualize_original_vs_replication_aggregate(
             color = colors[cond]
 
             # Plot dots
-            ax.scatter(blocks, acc, c=color, s=30, zorder=3)
+            ax.scatter(blocks, acc, c=color, s=18, zorder=3)
 
             # Fit and plot curve
             fit = fit_learning_rate(blocks, acc, method="ols")
@@ -1801,7 +1810,11 @@ def visualize_original_vs_replication_aggregate(
 
             endpoints[cond] = (x_fit[-1], y_fit[-1], fit.b)
 
-        # Direct labeling: T-match on top, P-match on bottom
+        # Direct labeling: T-match on top, P-match on bottom. Right edge aligns
+        # with the rightmost edge of the final dot at block 8.
+        from matplotlib.transforms import offset_copy
+        dot_radius_pts = float(np.sqrt(18 / np.pi))
+        label_trans = offset_copy(ax.transData, fig=fig, x=dot_radius_pts, units="points")
         for cond, (x, y, lr) in endpoints.items():
             color = colors[cond]
             if cond == "T":
@@ -1810,8 +1823,9 @@ def visualize_original_vs_replication_aggregate(
             else:  # P-match
                 y_offset = -2.0
                 va = "top"
-            ax.text(x - 0.5, y + y_offset, f"{labels[cond]}  LR={_fmt_lr(lr)}",
-                    color=color, fontsize=9, va=va, ha="center")
+            ax.text(x, y + y_offset, f"{labels[cond]}  LR={_fmt_lr(lr)}",
+                    color=color, fontsize=9, va=va, ha="right",
+                    transform=label_trans)
 
         # Tufte-style axis
         ax.spines["top"].set_visible(False)
@@ -1862,7 +1876,7 @@ def visualize_original_vs_replication_aggregate(
 
     # Left: All data from original paper
     plot_aggregate(axes[0], block_acc, slopes,
-                   "Original, Day 1, all 20 participants",
+                   f"Original, Day 1, {participants_per_group_label(slopes)}",
                    y_lim=y_lim, show_y_axis=True, show_x_axis=True)
 
     # Middle: Filtered data from original paper
@@ -1878,7 +1892,7 @@ def visualize_original_vs_replication_aggregate(
     rep_day1_acc = rep_block_acc[rep_block_acc["day_index"] == 1].copy()
     rep_day1_slopes = rep_slopes[rep_slopes["day_index"] == 1].copy()
     plot_aggregate(axes[2], rep_day1_acc, rep_day1_slopes,
-                   "Replication, Day 1", y_lim=y_lim,
+                   f"Replication, Day 1, {participants_per_group_label(rep_day1_slopes)}", y_lim=y_lim,
                    show_y_axis=False, show_x_axis=False)
 
     fig.suptitle("Learning Rate Comparison: Original vs Replication",
