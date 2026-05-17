@@ -1641,20 +1641,22 @@ def visualize_original_individual_curves(
 
 def visualize_original_vs_replication_aggregate(
     original_data: tuple[pd.DataFrame, pd.DataFrame],
-    min_lr_1st_day: float | None = None,
-    replication_data: tuple[pd.DataFrame, pd.DataFrame] | None = None,
-    show_filtered: bool = True,
+    replication_data: tuple[pd.DataFrame, pd.DataFrame],
+    min_lr_1st_day_original: float,
     y_lim: tuple[float, float] | None = None,
     output_filename: str | None = None,
 ) -> plt.Figure:
     """
     Visualize aggregate learning curves: original paper data alongside replication.
 
+    Three panels: (1) original all participants, (2) original filtered by
+    min_lr_1st_day_original, (3) replication day 1.
+
     Args:
         original_data: tuple of (block_acc, slopes) from the original study
-        min_lr_1st_day: If set, exclude participants with LR below this threshold (e.g., 0 to exclude negative LRs)
-        replication_data: Optional tuple of (block_acc, slopes) from replication study (day 1 only)
-        show_filtered: If True, show the middle filtered chart (default: True)
+        replication_data: tuple of (block_acc, slopes) from replication study (day 1 only)
+        min_lr_1st_day_original: exclude original-study participants with day-1 LR below this threshold
+            for the middle "filtered" panel
     """
     block_acc, slopes = original_data
 
@@ -1741,69 +1743,42 @@ def visualize_original_vs_replication_aggregate(
 
         ax.set_title(title, fontsize=11)
 
-    if min_lr_1st_day is None:
-        raise ValueError("min_lr_1st_day is required")
+    fig, axes = plt.subplots(1, 3, figsize=(5.5 * 3, 5.5))
 
-    # Determine number of subplots based on what we're showing
-    n_plots = 1  # Always show "all participants"
-    if show_filtered:
-        n_plots += 1
-    if replication_data is not None:
-        n_plots += 1
-
-    fig, axes = plt.subplots(1, n_plots, figsize=(5.5 * n_plots, 5.5))
-    if n_plots == 1:
-        axes = [axes]  # Make it iterable
-
-    ax_idx = 0  # Track which axis we're using
-
-    # Compute shared y-axis range from all data (original + replication + control if provided)
+    # Compute shared y-axis range from all data
     all_means = block_acc.groupby(["cond", "block"])["accuracy"].mean()
     y_min = all_means.min()
     y_max = all_means.max()
 
-    if replication_data is not None:
-        rep_block_acc, rep_slopes = replication_data
-        # Filter to day 1 only
-        rep_day1 = rep_block_acc[rep_block_acc["day_index"] == 1]
-        rep_means = rep_day1.groupby(["cond", "block"])["accuracy"].mean()
-        y_min = min(y_min, rep_means.min())
-        y_max = max(y_max, rep_means.max())
+    rep_block_acc, rep_slopes = replication_data
+    rep_day1 = rep_block_acc[rep_block_acc["day_index"] == 1]
+    rep_means = rep_day1.groupby(["cond", "block"])["accuracy"].mean()
+    y_min = min(y_min, rep_means.min())
+    y_max = max(y_max, rep_means.max())
 
     y_padding = (y_max - y_min) * 0.1
     y_lim = (y_min - y_padding, y_max + y_padding)
 
     # Left: All data from original paper
-    original_title = (
-        "Original, Day 1, all 20 participants"
-        if show_filtered else
-        "Original, Day 1"
-    )
-    plot_aggregate(axes[ax_idx], block_acc, slopes, original_title,
+    plot_aggregate(axes[0], block_acc, slopes,
+                   "Original, Day 1, all 20 participants",
                    y_lim=y_lim, show_y_axis=True, show_x_axis=True)
-    ax_idx += 1
 
-    # Middle: Filtered data from original paper (optional)
-    if show_filtered:
-        valid_pids = slopes[slopes["b"] >= min_lr_1st_day]["participant_id"].unique()
-        block_acc_filtered = block_acc[block_acc["participant_id"].isin(valid_pids)]
-        slopes_filtered = slopes[slopes["participant_id"].isin(valid_pids)]
-        n_excluded = len(slopes["participant_id"].unique()) - len(valid_pids)
-        plot_aggregate(axes[ax_idx], block_acc_filtered, slopes_filtered,
-                      f"Original, Day 1, filtered (LR ≥ {min_lr_1st_day}, n={n_excluded} excluded)",
-                      y_lim=y_lim, show_y_axis=False, show_x_axis=False)
-        ax_idx += 1
+    # Middle: Filtered data from original paper
+    valid_pids = slopes[slopes["b"] >= min_lr_1st_day_original]["participant_id"].unique()
+    block_acc_filtered = block_acc[block_acc["participant_id"].isin(valid_pids)]
+    slopes_filtered = slopes[slopes["participant_id"].isin(valid_pids)]
+    n_excluded = len(slopes["participant_id"].unique()) - len(valid_pids)
+    plot_aggregate(axes[1], block_acc_filtered, slopes_filtered,
+                  f"Original, Day 1, filtered (LR ≥ {min_lr_1st_day_original}, n={n_excluded} excluded)",
+                  y_lim=y_lim, show_y_axis=False, show_x_axis=False)
 
-    # Right: Replication day 1 (if provided) - no TN line here
-    if replication_data is not None:
-        rep_block_acc, rep_slopes = replication_data
-        # Filter to day 1 only
-        rep_day1_acc = rep_block_acc[rep_block_acc["day_index"] == 1].copy()
-        rep_day1_slopes = rep_slopes[rep_slopes["day_index"] == 1].copy()
-        plot_aggregate(axes[ax_idx], rep_day1_acc, rep_day1_slopes,
-                       "Replication, Day 1", y_lim=y_lim,
-                       show_y_axis=False, show_x_axis=False)
-        ax_idx += 1
+    # Right: Replication day 1
+    rep_day1_acc = rep_block_acc[rep_block_acc["day_index"] == 1].copy()
+    rep_day1_slopes = rep_slopes[rep_slopes["day_index"] == 1].copy()
+    plot_aggregate(axes[2], rep_day1_acc, rep_day1_slopes,
+                   "Replication, Day 1", y_lim=y_lim,
+                   show_y_axis=False, show_x_axis=False)
 
     fig.suptitle("Learning Rate Comparison: Original vs Replication",
                  fontsize=14, fontweight="bold", y=0.98)
@@ -1935,17 +1910,12 @@ def main():
         # Visualize P-match vs T-match individual curves
         visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=20, cols_per_group=3)
 
-        # Show comparison with replication data (2 columns: original all + replication)
-        visualize_original_vs_replication_aggregate((orig_block_acc, orig_slopes), min_lr_1st_day=-1,
-                                     replication_data=(block_acc, slopes),
-                                     show_filtered=False,
-                                     output_filename="original_vs_replication_aggregate_2panel.png")
-
-        # Show comparison with replication data (3 columns: original all + filtered + replication)
-        visualize_original_vs_replication_aggregate((orig_block_acc, orig_slopes), min_lr_1st_day=-1,
-                                     replication_data=(block_acc, slopes),
-                                     show_filtered=True,
-                                     output_filename="original_vs_replication_aggregate_3panel.png")
+        # Original (all + filtered) alongside replication, in 3 panels
+        visualize_original_vs_replication_aggregate(
+            original_data=(orig_block_acc, orig_slopes),
+            replication_data=(block_acc, slopes),
+            min_lr_1st_day_original=-1,
+        )
 
         # Print fitted slopes
         print("\n=== Original Paper Fitted slopes (T-match vs Control) ===")
