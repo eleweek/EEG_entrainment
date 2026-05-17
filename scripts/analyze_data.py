@@ -1643,8 +1643,6 @@ def visualize_original_vs_replication_aggregate(
     original_data: tuple[pd.DataFrame, pd.DataFrame],
     replication_data: tuple[pd.DataFrame, pd.DataFrame],
     min_lr_1st_day_original: float,
-    y_lim: tuple[float, float] | None = None,
-    output_filename: str | None = None,
 ) -> plt.Figure:
     """
     Visualize aggregate learning curves: original paper data alongside replication.
@@ -1784,8 +1782,7 @@ def visualize_original_vs_replication_aggregate(
                  fontsize=14, fontweight="bold", y=0.98)
     fig.tight_layout(rect=(0, 0, 1, 1))
 
-    filename = output_filename if output_filename is not None else "original_vs_replication_aggregate.png"
-    _save(fig, filename)
+    _save(fig, "original_vs_replication_aggregate.png")
     return fig
 
 
@@ -1984,7 +1981,6 @@ def main():
 
         # Initial accuracy strip plot
         print("\nGenerating initial accuracy strip plot...")
-        import os
         b1_path = os.path.join(args.original_data_dir, "groupAccs2_lmm_b1.csv")
         rep_day1_block_acc_for_b1 = block_acc[block_acc["day_index"] == 1]
         rep_day1_slopes_for_b1 = slopes[slopes["day_index"] == 1]
