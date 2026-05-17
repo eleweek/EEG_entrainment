@@ -20,7 +20,7 @@ from statsmodels.regression.quantile_regression import QuantReg
 OUTPUT_DIR = "_generated_charts"
 
 
-def _save(fig: plt.Figure, filename: str, dpi: int = 300) -> None:
+def _save(fig: plt.Figure, filename: str, dpi: int = 450) -> None:
     """Save a figure into OUTPUT_DIR (created on first use)."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     fig.savefig(os.path.join(OUTPUT_DIR, filename), dpi=dpi, bbox_inches="tight")
@@ -807,9 +807,9 @@ def visualize_learning_curves(
                      ha="center", va="bottom", fontsize=11, color="#000000")
 
         # Group headers above the column headers
-        fig.text(0.25, 0.95, "P-match first", ha="center", va="top",
+        fig.text(0.25, 0.95, "Replication: P-match first", ha="center", va="top",
                  fontsize=13, fontweight="bold", color="#000000")
-        fig.text(0.75, 0.95, "T-match first", ha="center", va="top",
+        fig.text(0.75, 0.95, "Replication: T-match first", ha="center", va="top",
                  fontsize=13, fontweight="bold", color="#000000")
 
     suffix = "_day1" if day1_only else ""
