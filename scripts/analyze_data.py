@@ -23,8 +23,6 @@ OUTPUT_DIR = "_generated_charts"
 def _save(fig: plt.Figure, filename: str, dpi: int = 450) -> None:
     """Save a figure into OUTPUT_DIR (created on first use)."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    output_path = os.path.join(OUTPUT_DIR, filename)
-    fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
 
     stem, _ = os.path.splitext(filename)
     svg_path = os.path.join(OUTPUT_DIR, f"{stem}.svg")
