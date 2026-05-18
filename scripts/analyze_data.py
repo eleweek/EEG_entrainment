@@ -1264,92 +1264,6 @@ def visualize_day2_strip_plot(
     return fig
 
 
-def visualize_initial_accuracy_strip_plot(
-    orig_b1_path: str,
-    rep_block_acc: pd.DataFrame | None = None,
-    orig_slopes: pd.DataFrame | None = None,
-    rep_slopes: pd.DataFrame | None = None,
-) -> plt.Figure:
-    """Strip plot of first-block accuracy and log-fit intercepts for T-match and P-match."""
-    from scipy import stats as sp_stats
-
-    df = pd.read_csv(orig_b1_path)
-    # groupID 1=P-match, 2=T-match
-    p_acc = df[df["groupID"] == 1]["acc"].values
-    t_acc = df[df["groupID"] == 2]["acc"].values
-
-    t_stat, p_val = sp_stats.ttest_ind(t_acc, p_acc, equal_var=False)
-    print(f"  Original block 1: T-match={np.mean(t_acc):.1f}±{np.std(t_acc,ddof=1):.1f}, "
-          f"P-match={np.mean(p_acc):.1f}±{np.std(p_acc,ddof=1):.1f}, "
-          f"Welch t={t_stat:.3f}, p={p_val:.4f}")
-
-    # Build groups bottom-to-top (matplotlib draws upward)
-    # Visual order top-to-bottom: Rep Block 1, Rep Fit, Orig Block 1, Orig Fit
-    groups_info = []
-
-    # Section 0 (bottom): Original, Fit Intercept
-    if orig_slopes is not None:
-        orig_p_a = orig_slopes[orig_slopes["cond"] == "P"]["a"].values
-        orig_t_a = orig_slopes[orig_slopes["cond"] == "T"]["a"].values
-        t_stat_a, p_val_a = sp_stats.ttest_ind(orig_t_a, orig_p_a, equal_var=False)
-        print(f"  Original intercept: T-match={np.mean(orig_t_a):.1f}±{np.std(orig_t_a,ddof=1):.1f}, "
-              f"P-match={np.mean(orig_p_a):.1f}±{np.std(orig_p_a,ddof=1):.1f}, "
-              f"Welch t={t_stat_a:.3f}, p={p_val_a:.4f}")
-        groups_info.extend([
-            ("P-match", orig_p_a, "#2d8a2d", 0),
-            ("T-match", orig_t_a, "#1f5f8a", 0),
-        ])
-
-    # Section 1: Original, Block 1
-    groups_info.extend([
-        ("P-match", p_acc, "#2d8a2d", 1),
-        ("T-match", t_acc, "#1f5f8a", 1),
-    ])
-
-    # Section 2: Replication, Fit Intercept
-    if rep_slopes is not None:
-        rep_p_a = rep_slopes[rep_slopes["cond"] == "P"]["a"].values
-        rep_t_a = rep_slopes[rep_slopes["cond"] == "T"]["a"].values
-        t_stat_ra, p_val_ra = sp_stats.ttest_ind(rep_t_a, rep_p_a, equal_var=False)
-        print(f"  Replication intercept: T-match={np.mean(rep_t_a):.1f}±{np.std(rep_t_a,ddof=1):.1f}, "
-              f"P-match={np.mean(rep_p_a):.1f}±{np.std(rep_p_a,ddof=1):.1f}, "
-              f"Welch t={t_stat_ra:.3f}, p={p_val_ra:.4f}")
-        groups_info.extend([
-            ("P-match", rep_p_a, "#2d8a2d", 2),
-            ("T-match", rep_t_a, "#1f5f8a", 2),
-        ])
-
-    # Section 3 (top): Replication, Block 1
-    if rep_block_acc is not None:
-        rep_b1 = rep_block_acc[rep_block_acc["block"] == 1]
-        rep_p = rep_b1[rep_b1["cond"] == "P"]["accuracy"].values
-        rep_t = rep_b1[rep_b1["cond"] == "T"]["accuracy"].values
-        t_stat_r, p_val_r = sp_stats.ttest_ind(rep_t, rep_p, equal_var=False)
-        print(f"  Replication block 1: T-match={np.mean(rep_t):.1f}±{np.std(rep_t,ddof=1):.1f}, "
-              f"P-match={np.mean(rep_p):.1f}±{np.std(rep_p,ddof=1):.1f}, "
-              f"Welch t={t_stat_r:.3f}, p={p_val_r:.4f}")
-        groups_info.extend([
-            ("P-match", rep_p, "#2d8a2d", 3),
-            ("T-match", rep_t, "#1f5f8a", 3),
-        ])
-
-    section_labels = {0: "Original, Fit Intercept", 1: "Original, Block 1",
-                      2: "Replication, Fit Intercept", 3: "Replication, Block 1"}
-    # Remove sections with no data
-    used_sections = {g[3] for g in groups_info}
-    section_labels = {k: v for k, v in section_labels.items() if k in used_sections}
-
-    fig, ax = plt.subplots(figsize=(10, 6))
-    _render_strip_plot(ax, groups_info,
-                       section_labels=section_labels,
-                       x_label="Accuracy",
-                       first_gap=0.7)
-    ax.xaxis.set_major_formatter(_accuracy_formatter())
-
-    fig.tight_layout()
-    _save(fig, "replication__strip_initial_accuracy__day1.png")
-    return fig
-
 
 def visualize_leave_one_out(
     provided_slopes: pd.DataFrame,
@@ -2120,16 +2034,6 @@ def main():
     print("\nGenerating Day 2 strip plot...")
     day2_slopes = load_original_paper_provided_learning_rates(".", filename="groupLR_postLMM.csv")
     visualize_day2_strip_plot(day2_slopes)
-
-    # Initial accuracy strip plot
-    print("\nGenerating initial accuracy strip plot...")
-    b1_path = os.path.join(args.original_data_dir, "groupAccs2_lmm_b1.csv")
-    rep_day1_block_acc_for_b1 = block_acc[block_acc["day_index"] == 1]
-    rep_day1_slopes_for_b1 = slopes[slopes["day_index"] == 1]
-    visualize_initial_accuracy_strip_plot(
-        b1_path, rep_day1_block_acc_for_b1,
-        orig_slopes=orig_slopes, rep_slopes=rep_day1_slopes_for_b1,
-    )
 
     # Spaghetti plots: individual learning curves overlaid per group
     print("\nGenerating spaghetti plots...")
