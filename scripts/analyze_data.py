@@ -610,7 +610,7 @@ def visualize_replication_aggregate_both_days(
     for (group, day), (x, y, lr) in endpoints.items():
         color = colors[(group, day)]
         # T-first: label above (positive offset), P-first: label below (negative offset)
-        y_offset = 2 if group == "T" else -2
+        y_offset = 2 if group == "T" else -3
         va = "bottom" if group == "T" else "top"
         ax.text(x, y + y_offset, f"{label_names[(group, day)]}  LR={_fmt_lr(lr)}",
                 color=color, fontsize=9, va=va, ha="right",
@@ -1225,12 +1225,12 @@ def visualize_validation_strip_plot(
     fig, ax = plt.subplots(figsize=(10, 6))
 
     groups_info = [
-        ("Provided", provided_slopes[provided_slopes["cond"] == "TN"]["b"].values, "#9370DB", 0),
         ("Recomputed", recomputed_tn_slopes[recomputed_tn_slopes["cond"] == "TN"]["b"].values, "#c9b1e8", 0),
-        ("Provided", provided_slopes[provided_slopes["cond"] == "P"]["b"].values, "#2d8a2d", 1),
+        ("Provided", provided_slopes[provided_slopes["cond"] == "TN"]["b"].values, "#9370DB", 0),
         ("Recomputed", recomputed_slopes[recomputed_slopes["cond"] == "P"]["b"].values, "#74c476", 1),
-        ("Provided", provided_slopes[provided_slopes["cond"] == "T"]["b"].values, "#1f5f8a", 2),
+        ("Provided", provided_slopes[provided_slopes["cond"] == "P"]["b"].values, "#2d8a2d", 1),
         ("Recomputed", recomputed_slopes[recomputed_slopes["cond"] == "T"]["b"].values, "#6baed6", 2),
+        ("Provided", provided_slopes[provided_slopes["cond"] == "T"]["b"].values, "#1f5f8a", 2),
     ]
 
     _render_strip_plot(ax, groups_info,
@@ -1754,7 +1754,7 @@ def visualize_original_vs_replication_aggregate(
                 y_offset = 2.0
                 va = "bottom"
             else:  # P-match
-                y_offset = -2.0
+                y_offset = -3
                 va = "top"
             ax.text(x, y + y_offset, f"{labels[cond]}  LR={_fmt_lr(lr)}",
                     color=color, fontsize=9, va=va, ha="right",
