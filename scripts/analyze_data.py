@@ -491,13 +491,13 @@ def run_h2_between_groups_day1(slopes: pd.DataFrame, n_perm: int = 10000, seed: 
 
 
 def run_h3_between_groups_day1_intercept(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0, two_sided: bool = False) -> None:
-    """H3 (exploratory): Day-1 between-groups comparison on intercept a."""
-    run_between_groups_test(slopes, day_index=1, column="a", label="H3 (exploratory)", n_perm=n_perm, seed=seed, two_sided=two_sided)
+    """H3 (not preregistered): Day-1 between-groups comparison on intercept a."""
+    run_between_groups_test(slopes, day_index=1, column="a", label="H3 (not preregistered)", n_perm=n_perm, seed=seed, two_sided=two_sided)
 
 
 def run_h3_between_groups_day2_intercept(slopes: pd.DataFrame, n_perm: int = 10000, seed: int = 0, two_sided: bool = False) -> None:
-    """H3 (exploratory): Day-2 between-groups comparison on intercept a."""
-    run_between_groups_test(slopes, day_index=2, column="a", label="H3 (exploratory)", n_perm=n_perm, seed=seed, two_sided=two_sided)
+    """H3 (not preregistered): Day-2 between-groups comparison on intercept a."""
+    run_between_groups_test(slopes, day_index=2, column="a", label="H3 (not preregistered)", n_perm=n_perm, seed=seed, two_sided=two_sided)
 
 
 def run_h3_between_groups_day1_initial_accuracy(
@@ -516,7 +516,7 @@ def run_h3_between_groups_day1_initial_accuracy(
         initial,
         day_index=1,
         column="accuracy",
-        label="H3 initial accuracy (exploratory)",
+        label="H3 initial accuracy (not preregistered)",
         n_perm=n_perm,
         seed=seed,
         two_sided=two_sided,
@@ -2184,6 +2184,7 @@ def main():
     print(f"\nP-match (filtered LR≥-1): Replication (n={len(rep_p_filtered_lr)}, mean={rep_p_filtered_lr.mean():.3f}) vs Original (n={len(orig_p_filtered_lr)}, mean={orig_p_filtered_lr.mean():.3f})")
     print(f"  t({pf_result.df:.1f}) = {pf_result.statistic:.3f}, p = {pf_result.pvalue:.4f}")
 
+    print("\n\n\n====== KEY ANALYSIS ======")
     # Run hypothesis tests
     run_h1_within_subject(slopes)
     run_h2_between_groups_day1(slopes, n_perm=args.n_permutations, seed=args.permutation_seed, two_sided=False)
