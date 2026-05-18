@@ -1896,7 +1896,7 @@ def main():
         ),
     )
     parser.add_argument(
-        "--original-data-dir",
+        "--original-study-data-dir",
         type=str,
         required=True,
         metavar="DIR",
@@ -1939,10 +1939,10 @@ def main():
         use_internal_ids=args.use_internal_ids,
     )
 
-    print(f"\nLoading original paper data from {args.original_data_dir}...")
+    print(f"\nLoading original paper data from {args.original_study_data_dir}...")
 
     # Load P-match vs T-match
-    orig_block_acc, orig_slopes = refit_approximate_original_paper_curves(args.original_data_dir)
+    orig_block_acc, orig_slopes = refit_approximate_original_paper_curves(args.original_study_data_dir)
     print(f"Loaded {len(orig_slopes)} participants (P-match and T-match)")
 
     # Print fitted slopes
@@ -1951,7 +1951,7 @@ def main():
 
     # Load T-match vs Control (needed for aggregate chart)
     print("\nLoading T-match vs Control comparison...")
-    tc_block_acc, tc_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={2: "T", 4: "C"})
+    tc_block_acc, tc_slopes = refit_approximate_original_paper_curves(args.original_study_data_dir, groups={2: "T", 4: "C"})
     print(f"Loaded {len(tc_slopes)} participants (T-match and Control)")
 
     # Extract control data for aggregate chart
@@ -1960,7 +1960,7 @@ def main():
 
     # Load T-nonMatch (needed for specific aggregate chart)
     print("\nLoading T-nonMatch...")
-    tn_block_acc, tn_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={3: "TN"})
+    tn_block_acc, tn_slopes = refit_approximate_original_paper_curves(args.original_study_data_dir, groups={3: "TN"})
     print(f"Loaded {len(tn_slopes)} participants (T-nonMatch)")
 
     # Visualize P-match vs T-match individual curves
@@ -1983,7 +1983,7 @@ def main():
 
     # Load P-match vs Control
     print("\nLoading P-match vs Control comparison...")
-    pc_block_acc, pc_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={1: "P", 4: "C"})
+    pc_block_acc, pc_slopes = refit_approximate_original_paper_curves(args.original_study_data_dir, groups={1: "P", 4: "C"})
     print(f"Loaded {len(pc_slopes)} participants (P-match and Control)")
 
     # Print fitted slopes
@@ -1996,16 +1996,16 @@ def main():
 
     # Load T-nonMatch data for strip plot
     print("\nLoading T-nonMatch data...")
-    tn_block_acc, tn_slopes = refit_approximate_original_paper_curves(args.original_data_dir, groups={3: "TN"})
+    tn_block_acc, tn_slopes = refit_approximate_original_paper_curves(args.original_study_data_dir, groups={3: "TN"})
     print(f"Loaded {len(tn_slopes)} participants (T-nonMatch)")
 
     # Prepare data for strip plot - use PROVIDED learning rates for original data
     print("\nLoading provided learning rates from groupLR_forLMM.csv...")
-    provided_slopes = load_original_paper_provided_learning_rates(args.original_data_dir)
+    provided_slopes = load_original_paper_provided_learning_rates(args.original_study_data_dir)
 
     if provided_slopes is None:
         raise FileNotFoundError(
-            f"groupLR_forLMM.csv not found in {args.original_data_dir}. "
+            f"groupLR_forLMM.csv not found in {args.original_study_data_dir}. "
             "This file is required for the strip plot to use the paper's official learning rates."
         )
 
@@ -2032,7 +2032,7 @@ def main():
 
     # Day 2 strip plot (original study, second session)
     print("\nGenerating Day 2 strip plot...")
-    day2_slopes = load_original_paper_provided_learning_rates(".", filename="groupLR_postLMM.csv")
+    day2_slopes = load_original_paper_provided_learning_rates(args.original_study_data_dir, filename="groupLR_postLMM.csv")
     visualize_day2_strip_plot(day2_slopes)
 
     # Spaghetti plots: individual learning curves overlaid per group
