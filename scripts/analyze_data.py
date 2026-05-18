@@ -35,10 +35,10 @@ def _save(fig: plt.Figure, filename: str, dpi: int = 300) -> None:
     stem, _ = os.path.splitext(filename)
     svg_path = os.path.join(OUTPUT_DIR, f"{stem}.svg")
     with plt.rc_context({"svg.fonttype": "none"}):
-        fig.savefig(svg_path, format="svg", bbox_inches="tight")
+        fig.savefig(svg_path, format="svg", bbox_inches="tight", pad_inches=0.0)
 
     webp_path = os.path.join(OUTPUT_DIR, f"{stem}.webp")
-    fig.savefig(webp_path, format="webp", dpi=dpi, bbox_inches="tight")
+    fig.savefig(webp_path, format="webp", dpi=dpi, bbox_inches="tight", pad_inches=0.0)
 
 
 def _cond_slug(cond: str) -> str:
