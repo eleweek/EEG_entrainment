@@ -20,9 +20,15 @@ from statsmodels.regression.quantile_regression import QuantReg
 OUTPUT_DIR = "_generated_charts"
 PUBLIC_ID_TABLE = "participant_public_id_mapping"
 EXPORTED_BLOCK_ACCURACY_FILENAME = "block_accuracy.csv"
+COND_SLUGS = {
+    "P": "p_match",
+    "T": "t_match",
+    "TN": "t_nonmatch",
+    "C": "control",
+}
 
 
-def _save(fig: plt.Figure, filename: str, dpi: int = 450) -> None:
+def _save(fig: plt.Figure, filename: str, dpi: int = 300) -> None:
     """Save a figure into OUTPUT_DIR (created on first use)."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -33,6 +39,11 @@ def _save(fig: plt.Figure, filename: str, dpi: int = 450) -> None:
 
     webp_path = os.path.join(OUTPUT_DIR, f"{stem}.webp")
     fig.savefig(webp_path, format="webp", dpi=dpi, bbox_inches="tight")
+
+
+def _cond_slug(cond: str) -> str:
+    """Stable filename slug for a condition code."""
+    return COND_SLUGS.get(cond, cond.lower().replace("-", "_"))
 
 
 def _fmt_lr(lr: float, digits: int = 2) -> str:
@@ -637,7 +648,7 @@ def visualize_replication_aggregate_both_days(
     ax.yaxis.set_major_formatter(_accuracy_formatter())
 
     fig.tight_layout()
-    _save(fig, "replication_aggregate_both_days.png")
+    _save(fig, "replication__aggregate_accuracy__both_days.png")
     return fig
 
 
@@ -777,14 +788,14 @@ def visualize_learning_curves(
     for row_idx in range(n_rows):
         axes[row_idx, 0].yaxis.set_major_formatter(_accuracy_formatter())
 
-    fig.tight_layout(rect=(0, 0.035, 0.98, 0.965))
-    fig.subplots_adjust(wspace=0.08, hspace=0.24)
+    fig.subplots_adjust(left=0.045, right=0.985, bottom=0.06, top=0.972,
+                        wspace=0.00, hspace=0.16)
     # Add extra space between columns 1 and 2 (between T-first and P-first)
     for row_idx in range(n_rows):
         for col_idx in [2, 3]:
             ax = axes[row_idx, col_idx]
             pos = ax.get_position()
-            ax.set_position([pos.x0 + 0.02, pos.y0, pos.width, pos.height])
+            ax.set_position([pos.x0 + 0.025, pos.y0, pos.width, pos.height])
 
     # Column headers just above each chart (subordinate to group headers)
     col_headers = ["Day 1, T-match", "Day 2, P-match", "Day 1, P-match", "Day 2, T-match"]
@@ -808,7 +819,7 @@ def visualize_learning_curves(
     fig.text(p_group_center, group_header_y, "P-match first", ha="center", va="top",
              fontsize=13, fontweight="bold", color="#000000")
 
-    _save(fig, "learning_curves_per_participant.png")
+    _save(fig, "replication__individual_accuracy__both_days.png")
     return fig
 
 
@@ -1174,7 +1185,7 @@ def visualize_lr_strip_plot(
             ("P-match", rep_p_slopes["b"].values, "#2d8a2d", 1),
             ("T-match", rep_t_slopes["b"].values, "#1f5f8a", 1),
         ]
-        filename = "strip_plot_compact.png"
+        filename = "original_replication__strip_learning_rate__day1_compact.png"
     else:
         all_orig_values = np.concatenate([
             orig_p_slopes["b"].values, orig_t_slopes["b"].values,
@@ -1190,7 +1201,7 @@ def visualize_lr_strip_plot(
             ("P-match", rep_p_slopes["b"].values, "#2d8a2d", 1),
             ("T-match", rep_t_slopes["b"].values, "#1f5f8a", 1),
         ]
-        filename = "strip_plot.png"
+        filename = "original_replication__strip_learning_rate__day1.png"
 
     _render_strip_plot(ax, groups_info,
                        section_labels={0: "Original, Day 1", 1: "Replication, Day 1"},
@@ -1228,7 +1239,7 @@ def visualize_validation_strip_plot(
                        first_gap=0.7)
 
     fig.tight_layout()
-    _save(fig, "validation_strip_plot.png")
+    _save(fig, "original__validation_learning_rate__recomputed.png")
     return fig
 
 
@@ -1249,7 +1260,7 @@ def visualize_day2_strip_plot(
                        x_label="Learning Rates by Group")
 
     fig.tight_layout()
-    _save(fig, "strip_plot_day2.png")
+    _save(fig, "replication__strip_learning_rate__day2.png")
     return fig
 
 
@@ -1336,7 +1347,7 @@ def visualize_initial_accuracy_strip_plot(
     ax.xaxis.set_major_formatter(_accuracy_formatter())
 
     fig.tight_layout()
-    _save(fig, "strip_plot_initial_accuracy.png")
+    _save(fig, "replication__strip_initial_accuracy__day1.png")
     return fig
 
 
@@ -1404,7 +1415,7 @@ def visualize_leave_one_out(
     ax.tick_params(axis="both", length=3, width=0.5)
 
     fig.tight_layout()
-    _save(fig, "leave_one_out.png")
+    _save(fig, "replication__leave_one_out__day1_learning_rate.png")
     return fig
 
 
@@ -1558,7 +1569,7 @@ def visualize_spaghetti_all(
             None,
             None,
         ],
-    ], "spaghetti_all.png")
+    ], "original_replication__spaghetti_accuracy__all_groups.png")
 
 
 def visualize_spaghetti_PT_comparison(
@@ -1578,7 +1589,7 @@ def visualize_spaghetti_PT_comparison(
             _spaghetti_panel(orig_ba, orig_sl, "P", "Original"),
             _spaghetti_panel(rep_ba, rep_sl, "P", "Replication"),
         ],
-    ], "spaghetti_PT_comparison.png")
+    ], "original_replication__spaghetti_accuracy__t_p_match.png")
 
 
 def visualize_original_individual_curves(
@@ -1745,7 +1756,7 @@ def visualize_original_individual_curves(
     fig.text(0.75, 0.992, cond_labels[cond2], ha="center", va="top",
              fontsize=12, fontweight="bold", color="#000000")
 
-    _save(fig, f"original learning rates {cond_labels[cond1]} vs {cond_labels[cond2]}.png")
+    _save(fig, f"original__individual_accuracy__{_cond_slug(cond1)}_vs_{_cond_slug(cond2)}.png")
     return fig
 
 
@@ -1907,7 +1918,7 @@ def visualize_original_vs_replication_aggregate(
                  fontsize=14, fontweight="bold", y=0.98)
     fig.tight_layout(rect=(0, 0, 1, 1))
 
-    _save(fig, "original_vs_replication_aggregate.png")
+    _save(fig, "original_replication__aggregate_accuracy__day1.png")
     return fig
 
 
