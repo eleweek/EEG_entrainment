@@ -12,7 +12,7 @@ The replication code covers three main jobs:
 
 The analysis code is the most polished part of the repository. The experiment-running code is usable, but still reflects the hardware and study setup used for this project.
 
-## Public Data
+## Public Replication Data
 
 The public replication data is COMING SOON to:
 
