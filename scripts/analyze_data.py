@@ -10,10 +10,12 @@ import pingouin as pg
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.transforms import Bbox
 from matplotlib.ticker import PercentFormatter
 from scipy.optimize import curve_fit
 from scipy import stats
 import statsmodels.api as sm
+import statsmodels.formula.api as smf
 from statsmodels.regression.quantile_regression import QuantReg
 
 
@@ -30,16 +32,28 @@ COND_SLUGS = {
 
 def _save(fig: plt.Figure, filename: str, dpi: int = 300) -> None:
     """Save a figure into OUTPUT_DIR (created on first use)."""
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    pad_inches = 0.03
+    svg_dir = os.path.join(OUTPUT_DIR, "svg")
+    webp_dir = os.path.join(OUTPUT_DIR, "webp")
+    os.makedirs(svg_dir, exist_ok=True)
+    os.makedirs(webp_dir, exist_ok=True)
+    x_pad_inches = 0.03
+    y_pad_inches = 0.10
+    fig.canvas.draw()
+    bbox = fig.get_tightbbox(fig.canvas.get_renderer())
+    bbox_inches = Bbox.from_extents(
+        bbox.x0 - x_pad_inches,
+        bbox.y0 - y_pad_inches,
+        bbox.x1 + x_pad_inches,
+        bbox.y1 + y_pad_inches,
+    )
 
     stem, _ = os.path.splitext(filename)
-    svg_path = os.path.join(OUTPUT_DIR, f"{stem}.svg")
+    svg_path = os.path.join(svg_dir, f"{stem}.svg")
     with plt.rc_context({"svg.fonttype": "none"}):
-        fig.savefig(svg_path, format="svg", bbox_inches="tight", pad_inches=pad_inches)
+        fig.savefig(svg_path, format="svg", bbox_inches=bbox_inches)
 
-    webp_path = os.path.join(OUTPUT_DIR, f"{stem}.webp")
-    fig.savefig(webp_path, format="webp", dpi=dpi, bbox_inches="tight", pad_inches=pad_inches)
+    webp_path = os.path.join(webp_dir, f"{stem}.webp")
+    fig.savefig(webp_path, format="webp", dpi=dpi, bbox_inches=bbox_inches)
 
 
 def _cond_slug(cond: str) -> str:
@@ -1006,7 +1020,8 @@ def load_original_paper_provided_learning_rates(data_dir: str, filename: str = "
     """
     Load provided learning rates from a CSV file.
 
-    Returns DataFrame with columns: [participant_id, cond, b] where b is the learning rate.
+    Returns DataFrame with columns including [participant_id, cond, b, phase, match, subID]
+    where b is the learning rate.
     Returns None if file doesn't exist.
     """
     import os
@@ -1046,9 +1061,31 @@ def load_original_paper_provided_learning_rates(data_dir: str, filename: str = "
             "participant_id": pid,
             "cond": cond,
             "b": lr,
+            "phase": phase,
+            "match": match,
+            "subID": subid,
         })
 
     return pd.DataFrame(rows)
+
+
+def original_learning_rate_model_phase_p(provided_slopes: pd.DataFrame) -> dict[str, float]:
+    """Fit the released original-study learning-rate model and return its phase effect."""
+    required = {"b", "phase", "match"}
+    missing = required.difference(provided_slopes.columns)
+    if missing:
+        raise ValueError(f"Original learning-rate model data is missing columns: {sorted(missing)}")
+
+    model_data = provided_slopes.rename(columns={"b": "LR"}).copy()
+    model_data["phase"] = model_data["phase"].astype(int)
+    model_data["match"] = model_data["match"].astype(int)
+    model = smf.ols("LR ~ C(phase) + C(match)", data=model_data).fit()
+    term = "C(phase)[T.2]"
+    return {
+        "p": float(model.pvalues[term]),
+        "t": float(model.tvalues[term]),
+        "df": float(model.df_resid),
+    }
 
 
 def _render_strip_plot(
@@ -1270,28 +1307,29 @@ def visualize_leave_one_out(
     provided_slopes: pd.DataFrame,
 ) -> plt.Figure:
     """
-    Leave-one-out sensitivity plot: for each participant, remove them and
-    recompute Welch's two-tailed p-value for T-match vs P-match.
+    Leave-one-out sensitivity plot: for each released original-study participant
+    learning rate, remove it and recompute the paper's learning-rate model p-value.
     Uses the original provided learning rates (groupLR_forLMM.csv).
     """
-    t_lr = provided_slopes[provided_slopes["cond"] == "T"]["b"].values
-    p_df = provided_slopes[provided_slopes["cond"] == "P"][["participant_id", "b"]].copy().reset_index(drop=True)
-
-    reported_p = 0.045
+    baseline = original_learning_rate_model_phase_p(provided_slopes)
+    reported_p = baseline["p"]
 
     results = []  # (participant_id, group, lr, p_without)
-
-    # Leave out each T-match participant
-    for i in range(len(t_lr)):
-        t_reduced = np.delete(t_lr, i)
-        p_val = stats.ttest_ind(t_reduced, p_df["b"].values, equal_var=False).pvalue
-        results.append((f"T_{i+1:02d}", "T-match", t_lr[i], p_val))
-
-    # Leave out each P-match participant
-    for i, row in p_df.iterrows():
-        p_reduced = p_df.drop(i)["b"].values
-        p_val = stats.ttest_ind(t_lr, p_reduced, equal_var=False).pvalue
-        results.append((row["participant_id"], "P-match", row["b"], p_val))
+    group_labels = {
+        "T": "T-match",
+        "P": "P-match",
+        "TN": "T-nonMatch",
+    }
+    indexed_slopes = provided_slopes.reset_index(names="original_index")
+    indexed_slopes = indexed_slopes[indexed_slopes["cond"].isin(["T", "P"])].reset_index(drop=True)
+    for i, row in indexed_slopes.iterrows():
+        model_result = original_learning_rate_model_phase_p(provided_slopes.drop(index=row["original_index"]))
+        results.append((
+            row["participant_id"],
+            group_labels.get(row["cond"], row["cond"]),
+            row["b"],
+            model_result["p"],
+        ))
 
     import seaborn as sns
 
@@ -1300,21 +1338,26 @@ def visualize_leave_one_out(
 
     fig, ax = plt.subplots(figsize=(8, 2.4))
 
-    palette = {"T-match removed": "#1f5f8a", "P-match removed": "#2d8a2d"}
-    sns.swarmplot(data=df, x="p_value", y="group", palette=palette, size=4.5,
-                  edgecolor="white", linewidth=0.5, alpha=0.7, ax=ax, orient="h")
+    order = ["T-match removed", "P-match removed"]
+    palette = {
+        "T-match removed": "#1f5f8a",
+        "P-match removed": "#2d8a2d",
+    }
+    sns.swarmplot(data=df, x="p_value", y="group", hue="group", order=order, palette=palette,
+                  size=4.5, edgecolor="white", linewidth=0.5, alpha=0.7, ax=ax, orient="h",
+                  legend=False)
     ax.set_ylim(1.25, -0.25)
 
     # Significance threshold
-    ax.axvline(x=0.05, color="red", linestyle="-", linewidth=1, alpha=0.7, label="p = 0.05")
+    ax.axvline(x=0.05, color="red", linestyle="-", linewidth=1, alpha=0.7, zorder=10, label="p = 0.05")
 
-    # Reported p-value from the original analysis.
+    # Recomputed p-value from the original released analysis data.
     ax.axvline(x=reported_p, color="gray", linestyle=":", linewidth=1, alpha=0.7,
-               label="Reported p = 0.045")
+               label=f"Reported p = {reported_p:.3f}")
 
-    ax.set_xlabel("Welch's p-value (two-tailed)", fontsize=10, labelpad=8)
+    ax.set_xlabel("p-value", fontsize=10, labelpad=8)
     ax.set_ylabel("")
-    n_flip = sum(1 for r in results if r[3] >= 0.05)
+    n_flip = sum(1 for r in results if r[3] > 0.05)
     ax.set_title(
         "Leave-one-out sensitivity: T-match vs P-match\n"
         f"{n_flip}/{len(results)} single removals make p > 0.05",
@@ -1330,7 +1373,7 @@ def visualize_leave_one_out(
     ax.tick_params(axis="both", length=3, width=0.5)
 
     fig.tight_layout()
-    _save(fig, "replication__leave_one_out__day1_learning_rate.png")
+    _save(fig, "original__leave_one_out__learning_rate_model.png")
     return fig
 
 

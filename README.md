@@ -14,7 +14,7 @@ The analysis code is the most polished part of the repository. The experiment-ru
 
 ## Public Replication Data
 
-The public replication data is COMING SOON to:
+The public replication data is in:
 
 ```text
 published_replication_data/
