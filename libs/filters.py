@@ -18,6 +18,7 @@ def filter_and_drop_dead_channels(raw, picks, to_drop=None, avgref=False):
         
     raw.filter(l_freq=1.0, h_freq=45.0, verbose=False)
     raw.notch_filter(50, notch_widths=4, verbose=False)
+    raw.notch_filter(60, notch_widths=4, verbose=False)
 
     if avgref:
         raw.set_eeg_reference('average', projection=False)
