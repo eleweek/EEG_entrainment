@@ -31,14 +31,15 @@ COND_SLUGS = {
 def _save(fig: plt.Figure, filename: str, dpi: int = 300) -> None:
     """Save a figure into OUTPUT_DIR (created on first use)."""
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    pad_inches = 0.03
 
     stem, _ = os.path.splitext(filename)
     svg_path = os.path.join(OUTPUT_DIR, f"{stem}.svg")
     with plt.rc_context({"svg.fonttype": "none"}):
-        fig.savefig(svg_path, format="svg", bbox_inches="tight", pad_inches=0.0)
+        fig.savefig(svg_path, format="svg", bbox_inches="tight", pad_inches=pad_inches)
 
     webp_path = os.path.join(OUTPUT_DIR, f"{stem}.webp")
-    fig.savefig(webp_path, format="webp", dpi=dpi, bbox_inches="tight", pad_inches=0.0)
+    fig.savefig(webp_path, format="webp", dpi=dpi, bbox_inches="tight", pad_inches=pad_inches)
 
 
 def _cond_slug(cond: str) -> str:
@@ -1260,7 +1261,7 @@ def visualize_day2_strip_plot(
                        x_label="Learning Rates by Group")
 
     fig.tight_layout()
-    _save(fig, "replication__strip_learning_rate__day2.png")
+    _save(fig, "original__strip_learning_rate__day2.png")
     return fig
 
 
