@@ -136,7 +136,7 @@ Display a fixation screen while recording EEG:
 python3 scripts/eo_eeg_screen.py
 ```
 
-Estimate alpha frequency from a recording:
+Estimate peak individual alpha frequency (IAF) from a recording:
 
 ```bash
 python3 -m plot.xdf_to_specparam --picks O1,Oz,O2 recording.xdf
