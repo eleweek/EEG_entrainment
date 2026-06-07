@@ -2010,6 +2010,19 @@ def main():
     # Visualize P-match vs T-match individual curves
     visualize_original_individual_curves(orig_block_acc, orig_slopes, max_per_group=20, cols_per_group=3)
 
+    # Visualize T-match vs T-nonMatch individual curves
+    t_tn_block_acc, t_tn_slopes = refit_approximate_original_paper_curves(
+        args.original_study_data_dir,
+        groups={2: "T", 3: "TN"},
+    )
+    visualize_original_individual_curves(
+        t_tn_block_acc,
+        t_tn_slopes,
+        max_per_group=20,
+        cols_per_group=3,
+        cond_labels={"T": "T-match", "TN": "T-nonMatch"},
+    )
+
     # Original (all + filtered) alongside replication, in 3 panels
     visualize_original_vs_replication_aggregate(
         original_data=(orig_block_acc, orig_slopes),
